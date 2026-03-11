@@ -60,7 +60,18 @@ let outlineObjects: THREE.Object3D[] = []
 let sketchPass: ShaderPass
 let paperPass: ShaderPass
 let geometryStarsGroup: THREE.Group
+let moonMesh: THREE.Mesh
+let moonShadowMesh: THREE.Mesh
 let leftLeg: THREE.Object3D
+
+interface StarParticle {
+  mesh: THREE.Mesh
+  life: number
+  maxLife: number
+  baseScale: number
+}
+
+let starParticles: StarParticle[] = []
 let rightLeg: THREE.Object3D
 let leftArm: THREE.Object3D
 let rightArm: THREE.Object3D
@@ -221,7 +232,7 @@ onMounted(() => {
   scene.add(directionalLight)
 
   const moonLight = new THREE.PointLight('#f5d76e', 0.5, 50)
-  moonLight.position.set(4, 5.0, -3)
+  moonLight.position.set(2, 6.0, -3)
   scene.add(moonLight)
 
   createEarth(toonGradientMap)
@@ -235,20 +246,6 @@ onMounted(() => {
 
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)] as T
-}
-
-function createCircleTexture(): THREE.Texture {
-  const canvas = document.createElement('canvas')
-  canvas.width = 32
-  canvas.height = 32
-  const ctx = canvas.getContext('2d')!
-  const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16)
-  gradient.addColorStop(0, 'rgba(255,255,255,1)')
-  gradient.addColorStop(0.3, 'rgba(255,255,255,0.8)')
-  gradient.addColorStop(1, 'rgba(255,255,255,0)')
-  ctx.fillStyle = gradient
-  ctx.fillRect(0, 0, 32, 32)
-  return new THREE.CanvasTexture(canvas)
 }
 
 function createEarth(toonGradientMap: THREE.DataTexture) {
@@ -327,34 +324,6 @@ function createEarth(toonGradientMap: THREE.DataTexture) {
 }
 
 function createStars(toonGradientMap: THREE.DataTexture) {
-  const circleTexture = createCircleTexture()
-
-  const starCount = 200
-  const positions = new Float32Array(starCount * 3)
-  for (let i = 0; i < starCount; i++) {
-    const theta = Math.random() * Math.PI * 2
-    const phi = Math.random() * Math.PI * 0.5
-    const r = 50 + Math.random() * 200
-    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta)
-    positions[i * 3 + 1] = r * Math.cos(phi)
-    positions[i * 3 + 2] = -r * Math.sin(phi) * Math.sin(theta)
-  }
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-  const material = new THREE.PointsMaterial({
-    color: '#ffffff',
-    size: 0.8,
-    sizeAttenuation: true,
-    transparent: true,
-    opacity: 0.7,
-    map: circleTexture,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  })
-  const stars = new THREE.Points(geometry, material)
-  stars.name = 'stars'
-  scene.add(stars)
-
   const starColors = [
     new THREE.Color('#ffffff'),
     new THREE.Color('#e8e8ff'),
@@ -362,14 +331,11 @@ function createStars(toonGradientMap: THREE.DataTexture) {
     new THREE.Color('#cce8ff'),
   ]
 
-  const diamondGeo = new THREE.OctahedronGeometry(1, 0)
-
-  function createFiveStarShape(): THREE.Shape {
+  function createStarShape(points: number, outerR: number, innerR: number): THREE.Shape {
     const shape = new THREE.Shape()
-    const outerR = 1
-    const innerR = 0.4
-    for (let i = 0; i < 10; i++) {
-      const angle = (i / 10) * Math.PI * 2 - Math.PI / 2
+    const total = points * 2
+    for (let i = 0; i < total; i++) {
+      const angle = (i / total) * Math.PI * 2 - Math.PI / 2
       const r = i % 2 === 0 ? outerR : innerR
       const x = Math.cos(angle) * r
       const y = Math.sin(angle) * r
@@ -380,23 +346,16 @@ function createStars(toonGradientMap: THREE.DataTexture) {
     return shape
   }
 
-  const fiveStarGeo = new THREE.ExtrudeGeometry(createFiveStarShape(), { depth: 0.15, bevelEnabled: false })
-
-  const geometries = [diamondGeo, fiveStarGeo]
+  const fiveStarGeo = new THREE.ShapeGeometry(createStarShape(5, 1, 0.4))
+  const sixStarGeo = new THREE.ShapeGeometry(createStarShape(6, 1, 0.5))
+  const circleGeo = new THREE.CircleGeometry(0.8, 16)
+  // 五星和六星各佔 40%，圓形佔 20%
+  const geometries = [fiveStarGeo, fiveStarGeo, sixStarGeo, sixStarGeo, circleGeo]
 
   const starGroup = new THREE.Group()
   starGroup.name = 'geometryStars'
 
-  // 用網格分佈 + jitter 讓星星均勻分散
-  const gridCols = 6
-  const gridRows = 3
-  const xRange = 16
-  const yMin = 2.5
-  const yRange = 5.0
-  const cellWidth = xRange / gridCols
-  const cellHeight = yRange / gridRows
-
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 35; i++) {
     const geo = pickRandom(geometries)
     let starGeo: THREE.BufferGeometry = geo.clone()
     if (starGeo.index) starGeo = starGeo.toNonIndexed()
@@ -411,43 +370,124 @@ function createStars(toonGradientMap: THREE.DataTexture) {
     }
     starGeo.setAttribute('color', new THREE.BufferAttribute(vertColors, 3))
 
-    const mat = new THREE.MeshToonMaterial({
+    const mat = new THREE.MeshBasicMaterial({
       vertexColors: true,
-      emissive: baseColor,
-      emissiveIntensity: 0.5,
       transparent: true,
-      opacity: 0.9,
-      gradientMap: toonGradientMap,
+      opacity: 0,
     })
 
     const mesh = new THREE.Mesh(starGeo, mat)
-
-    const col = i % gridCols
-    const row = Math.floor(i / gridCols)
-    const x = -xRange / 2 + (col + 0.5) * cellWidth + (Math.random() - 0.5) * cellWidth * 0.7
-    const y = yMin + (row + 0.5) * cellHeight + (Math.random() - 0.5) * cellHeight * 0.7
-    const z = -2 - Math.random() * 10
-    mesh.position.set(x, y, z)
-
-    const scale = 0.04 + Math.random() * 0.08
-    mesh.scale.set(scale, scale, scale)
-
-    mesh.rotation.set(
-      Math.random() * Math.PI,
-      Math.random() * Math.PI,
-      Math.random() * Math.PI,
-    )
-
-    mesh.userData.twinkle = Math.random() > 0.4
-    mesh.userData.twinkleSpeed = 0.5 + Math.random() * 2
-    mesh.userData.twinkleOffset = Math.random() * Math.PI * 2
-
+    mesh.visible = false
     starGroup.add(mesh)
+
+    starParticles.push({
+      mesh,
+      life: 0,
+      maxLife: 15 + Math.random() * 15,
+      baseScale: 0.03 + Math.random() * 0.05,
+    })
+  }
+
+  // Prewarm: 預先生成 18 顆星星，分散在不同生命階段
+  for (let i = 0; i < 18; i++) {
+    const p = starParticles[i]!
+    spawnStar(p)
+    // 給不同生命值，模擬已經運行了一段時間
+    p.life = 0.1 + Math.random() * 0.7 // 散佈在穩定和淡出階段
+    // 根據 life 設定正確的 scale 和 opacity
+    const mat = p.mesh.material
+    if (mat instanceof THREE.MeshBasicMaterial) {
+      const s = p.baseScale
+      p.mesh.scale.set(s, s, s)
+      if (p.life > 0.8) {
+        const t = (1.0 - p.life) / 0.2
+        mat.opacity = 0.9 * t
+      } else if (p.life > 0.3) {
+        mat.opacity = 0.9
+      } else {
+        const t = p.life / 0.3
+        mat.opacity = 0.9 * t
+      }
+    }
   }
 
   scene.add(starGroup)
   geometryStarsGroup = starGroup
   outlineObjects.push(starGroup)
+}
+
+function spawnStar(particle: StarParticle) {
+  const COLS = 3
+  const ROWS = 2
+
+  // 統計每個格子的存活星星數量，用螢幕空間投影判斷星星所在格子
+  const grid = new Array(COLS * ROWS).fill(0)
+  for (const p of starParticles) {
+    if (p.life <= 0 || p === particle) continue
+    const wz = p.mesh.position.z
+    const wy = p.mesh.position.y
+    const wx = p.mesh.position.x
+    const d = 10 - wz
+    const hh = Math.tan(30 * Math.PI / 180) * d
+    const hw = hh * (9 / 20)
+    const nx = Math.min(Math.max((wx + hw) / (2 * hw), 0), 0.999)
+    const ny = Math.min(Math.max((wy - hh * 0.4) / (hh * 0.6), 0), 0.999)
+    const col = Math.floor(nx * COLS)
+    const row = Math.floor(ny * ROWS)
+    grid[row * COLS + col]++
+  }
+
+  // 計算月亮所在的格子並排除
+  const moonDist = 10 - (-3) // 月亮 z=-3
+  const moonHH = Math.tan(30 * Math.PI / 180) * moonDist
+  const moonHW = moonHH * (9 / 20)
+  const moonNX = Math.min(Math.max((2 + moonHW) / (2 * moonHW), 0), 0.999)
+  const moonNY = Math.min(Math.max((6.0 - moonHH * 0.4) / (moonHH * 0.6), 0), 0.999)
+  const moonCell = Math.floor(moonNY * ROWS) * COLS + Math.floor(moonNX * COLS)
+
+  // 找出星星最少的格子們（排除月亮格子），隨機選一個
+  const minCount = Math.min(...grid.filter((_, i) => i !== moonCell))
+  const candidates: number[] = []
+  for (let i = 0; i < grid.length; i++) {
+    if (i !== moonCell && grid[i] === minCount) candidates.push(i)
+  }
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)]!
+  const chosenCol = chosen % COLS
+  const chosenRow = Math.floor(chosen / COLS)
+
+  const z = -2 - Math.random() * 8
+  const dist = 10 - z
+  const halfHeight = Math.tan(30 * Math.PI / 180) * dist
+  const halfWidth = halfHeight * (9 / 20)
+  const yMax = halfHeight
+  const yMin = halfHeight * 0.4
+
+  // 根據選中格子的螢幕空間範圍反算世界座標
+  const nxMin = chosenCol / COLS
+  const nxMax = (chosenCol + 1) / COLS
+  const nyMin = chosenRow / ROWS
+  const nyMax = (chosenRow + 1) / ROWS
+
+  const nx = nxMin + Math.random() * (nxMax - nxMin)
+  const ny = nyMin + Math.random() * (nyMax - nyMin)
+
+  const x = nx * 2 * halfWidth - halfWidth
+  const y = yMin + ny * (yMax - yMin)
+
+  particle.mesh.position.set(x, y, z)
+  particle.mesh.rotation.set(0, 0, Math.random() * Math.PI * 2)
+  particle.life = 1.0
+  particle.maxLife = 15 + Math.random() * 15
+  // 根據深度補償大小，越遠的星星 baseScale 越大，確保螢幕上視覺大小一致
+  const depthScale = dist / 12 // 最近 dist=12 時為 1，dist=20 時約 1.67
+  particle.baseScale = (0.03 + Math.random() * 0.05) * depthScale
+  particle.mesh.visible = true
+  particle.mesh.scale.set(particle.baseScale, particle.baseScale, particle.baseScale)
+  if (particle.mesh.material instanceof THREE.MeshBasicMaterial) {
+    particle.mesh.material.opacity = 0
+    // 30% 機率是亮星，用 color 放大亮度超過 bloom threshold
+    particle.mesh.material.color.setScalar(Math.random() < 0.3 ? 2.5 : 1.0)
+  }
 }
 
 function createMoon(toonGradientMap: THREE.DataTexture) {
@@ -482,9 +522,9 @@ function createMoon(toonGradientMap: THREE.DataTexture) {
   })
 
   const moon = new THREE.Mesh(nonIndexed, moonMat)
-  moon.position.set(4, 5.0, -3)
+  moon.position.set(2, 6.0, -3)
   scene.add(moon)
-  outlineObjects.push(moon)
+  moonMesh = moon
 
   // 背景色球體蓋住右邊，形成弦月
   const shadowGeo = new THREE.SphereGeometry(0.78, 32, 32)
@@ -492,8 +532,9 @@ function createMoon(toonGradientMap: THREE.DataTexture) {
     color: '#0a0e27',
   })
   const shadow = new THREE.Mesh(shadowGeo, shadowMat)
-  shadow.position.set(4 - 0.25, 5.0, -2.8)
+  shadow.position.set(2 - 0.25, 6.0, -2.8)
   scene.add(shadow)
+  moonShadowMesh = shadow
 }
 
 function createStickFigure(toonGradientMap: THREE.DataTexture) {
@@ -583,14 +624,57 @@ function animate() {
     earth.rotation.z -= 0.0008
   }
 
-  if (geometryStarsGroup) {
-    geometryStarsGroup.children.forEach((child) => {
-      if (child.userData.twinkle && child instanceof THREE.Mesh) {
-        if (child.material instanceof THREE.MeshToonMaterial) {
-          child.material.opacity = 0.5 + Math.sin(now * child.userData.twinkleSpeed + child.userData.twinkleOffset) * 0.4
-        }
+  // 月亮呼吸效果
+  if (moonMesh) {
+    const breathe = Math.sin(now * 0.5) * 0.5 + 0.5 // 0~1 慢速正弦波
+    const scale = 1.0 + breathe * 0.05 // 1.0 ~ 1.05 微微放大縮小
+    moonMesh.scale.set(scale, scale, scale)
+    moonShadowMesh.scale.set(scale, scale, scale)
+    if (moonMesh.material instanceof THREE.MeshToonMaterial) {
+      moonMesh.material.emissiveIntensity = 0.4 + breathe * 0.7 // 0.4 ~ 1.1
+    }
+  }
+
+  // 星星粒子系統
+  const dt = 1 / 60
+  for (const particle of starParticles) {
+    if (particle.life <= 0) {
+      const aliveCount = starParticles.filter(p => p.life > 0).length
+      if (aliveCount < 15 && Math.random() < 0.05) {
+        spawnStar(particle)
       }
-    })
+      continue
+    }
+
+    particle.life -= dt / particle.maxLife
+
+    if (particle.life <= 0) {
+      particle.life = 0
+      particle.mesh.visible = false
+      continue
+    }
+
+    const mat = particle.mesh.material
+    if (!(mat instanceof THREE.MeshBasicMaterial)) continue
+
+    const s = particle.baseScale
+    particle.mesh.scale.set(s, s, s)
+
+    // 淡入階段：life 從 1.0 到 0.8（前 20% 時間）
+    if (particle.life > 0.8) {
+      const t = (1.0 - particle.life) / 0.2 // 0 → 1
+      mat.opacity = 0.9 * t
+    }
+    // 穩定階段
+    else if (particle.life > 0.3) {
+      mat.opacity = 0.9
+    }
+    // 淡出階段：life 從 0.3 到 0（最後 30% 時間）
+    else {
+      const t = particle.life / 0.3 // 1 → 0
+      mat.opacity = 0.9 * t
+    }
+
   }
 
   if (stickFigure) {
