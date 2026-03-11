@@ -6,9 +6,46 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { SCENE_ASPECT } from '@/constants/scene'
 
 const EARTH_RADIUS = 4
 const EARTH_Y = -5.8
+
+const oceanColors: THREE.Color[] = [
+  new THREE.Color('#1a3a5c'),
+  new THREE.Color('#1e4266'),
+  new THREE.Color('#163858'),
+  new THREE.Color('#1b4060'),
+  new THREE.Color('#1a3d5e'),
+]
+const landColors: THREE.Color[] = [
+  new THREE.Color('#2a5a50'),
+  new THREE.Color('#2e6258'),
+  new THREE.Color('#336860'),
+  new THREE.Color('#255648'),
+  new THREE.Color('#2c5e52'),
+]
+const mountainColors: THREE.Color[] = [
+  new THREE.Color('#3a4a50'),
+  new THREE.Color('#344452'),
+  new THREE.Color('#3e4e54'),
+]
+const desertColors: THREE.Color[] = [
+  new THREE.Color('#4a5558'),
+  new THREE.Color('#505a5c'),
+  new THREE.Color('#465254'),
+  new THREE.Color('#4c5658'),
+]
+const snowColors: THREE.Color[] = [
+  new THREE.Color('#6a7a8a'),
+  new THREE.Color('#607080'),
+  new THREE.Color('#6e7e8e'),
+]
+const deepForestColors: THREE.Color[] = [
+  new THREE.Color('#1e4038'),
+  new THREE.Color('#1a3a32'),
+  new THREE.Color('#22443c'),
+]
 
 const containerRef = ref<HTMLDivElement>()
 
@@ -22,6 +59,26 @@ let composer: EffectComposer
 let outlineObjects: THREE.Object3D[] = []
 let sketchPass: ShaderPass
 let paperPass: ShaderPass
+let geometryStarsGroup: THREE.Group
+let leftLeg: THREE.Object3D
+let rightLeg: THREE.Object3D
+let leftArm: THREE.Object3D
+let rightArm: THREE.Object3D
+let capeMesh: THREE.Mesh
+
+const COMMON_VERTEX_SHADER = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+
+const GLSL_HASH = `
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+  }
+`
 
 const SketchPostShader = {
   uniforms: {
@@ -29,22 +86,14 @@ const SketchPostShader = {
     uTime: { value: 0.0 },
     uResolution: { value: new THREE.Vector2(1, 1) },
   },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
+  vertexShader: COMMON_VERTEX_SHADER,
   fragmentShader: `
     uniform sampler2D tDiffuse;
     uniform float uTime;
     uniform vec2 uResolution;
     varying vec2 vUv;
 
-    float hash(vec2 p) {
-      return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-    }
+    ${GLSL_HASH}
 
     void main() {
       vec2 texel = 1.0 / uResolution;
@@ -82,21 +131,13 @@ const PaperTextureShader = {
     tDiffuse: { value: null },
     uTime: { value: 0.0 },
   },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
+  vertexShader: COMMON_VERTEX_SHADER,
   fragmentShader: `
     uniform sampler2D tDiffuse;
     uniform float uTime;
     varying vec2 vUv;
 
-    float hash(vec2 p) {
-      return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-    }
+    ${GLSL_HASH}
 
     void main() {
       vec4 color = texture2D(tDiffuse, vUv);
@@ -129,7 +170,7 @@ onMounted(() => {
   scene = new THREE.Scene()
   scene.background = new THREE.Color('#0a0e27')
 
-  camera = new THREE.PerspectiveCamera(60, 9 / 20, 0.1, 2000)
+  camera = new THREE.PerspectiveCamera(60, SCENE_ASPECT, 0.1, 2000)
   camera.position.set(0, 0, 10)
   camera.lookAt(0, 0, 0)
 
@@ -158,7 +199,7 @@ onMounted(() => {
   composer.addPass(outlinePass)
 
   sketchPass = new ShaderPass(SketchPostShader)
-  sketchPass.uniforms.uResolution.value.set(containerRef.value.clientWidth, containerRef.value.clientHeight)
+  sketchPass.uniforms['uResolution']!.value.set(containerRef.value.clientWidth, containerRef.value.clientHeight)
   composer.addPass(sketchPass)
 
   paperPass = new ShaderPass(PaperTextureShader)
@@ -216,42 +257,6 @@ function createEarth(toonGradientMap: THREE.DataTexture) {
 
   const positionAttr = geometry.getAttribute('position')
   const colors = new Float32Array(positionAttr.count * 3)
-
-  const oceanColors: THREE.Color[] = [
-    new THREE.Color('#1a3a5c'),
-    new THREE.Color('#1e4266'),
-    new THREE.Color('#163858'),
-    new THREE.Color('#1b4060'),
-    new THREE.Color('#1a3d5e'),
-  ]
-  const landColors: THREE.Color[] = [
-    new THREE.Color('#2a5a50'),
-    new THREE.Color('#2e6258'),
-    new THREE.Color('#336860'),
-    new THREE.Color('#255648'),
-    new THREE.Color('#2c5e52'),
-  ]
-  const mountainColors: THREE.Color[] = [
-    new THREE.Color('#3a4a50'),
-    new THREE.Color('#344452'),
-    new THREE.Color('#3e4e54'),
-  ]
-  const desertColors: THREE.Color[] = [
-    new THREE.Color('#4a5558'),
-    new THREE.Color('#505a5c'),
-    new THREE.Color('#465254'),
-    new THREE.Color('#4c5658'),
-  ]
-  const snowColors: THREE.Color[] = [
-    new THREE.Color('#6a7a8a'),
-    new THREE.Color('#607080'),
-    new THREE.Color('#6e7e8e'),
-  ]
-  const deepForestColors: THREE.Color[] = [
-    new THREE.Color('#1e4038'),
-    new THREE.Color('#1a3a32'),
-    new THREE.Color('#22443c'),
-  ]
 
   for (let i = 0; i < positionAttr.count; i += 3) {
     const cx = (positionAttr.getX(i) + positionAttr.getX(i + 1) + positionAttr.getX(i + 2)) / 3
@@ -441,6 +446,7 @@ function createStars(toonGradientMap: THREE.DataTexture) {
   }
 
   scene.add(starGroup)
+  geometryStarsGroup = starGroup
   outlineObjects.push(starGroup)
 }
 
@@ -518,27 +524,27 @@ function createStickFigure(toonGradientMap: THREE.DataTexture) {
 
   const armGeo = new THREE.BoxGeometry(0.06, 0.32, 0.06)
 
-  const leftArm = new THREE.Mesh(armGeo, lightGrayMat.clone())
-  leftArm.position.set(-0.14, 0.58, 0)
-  leftArm.name = 'leftArm'
-  stickFigure.add(leftArm)
+  const leftArmMesh = new THREE.Mesh(armGeo, lightGrayMat)
+  leftArmMesh.position.set(-0.14, 0.58, 0)
+  leftArmMesh.name = 'leftArm'
+  stickFigure.add(leftArmMesh)
 
-  const rightArm = new THREE.Mesh(armGeo, lightGrayMat.clone())
-  rightArm.position.set(0.14, 0.58, 0)
-  rightArm.name = 'rightArm'
-  stickFigure.add(rightArm)
+  const rightArmMesh = new THREE.Mesh(armGeo, lightGrayMat)
+  rightArmMesh.position.set(0.14, 0.58, 0)
+  rightArmMesh.name = 'rightArm'
+  stickFigure.add(rightArmMesh)
 
   const legGeo = new THREE.BoxGeometry(0.08, 0.35, 0.08)
 
-  const leftLeg = new THREE.Mesh(legGeo, darkGrayMat.clone())
-  leftLeg.position.set(-0.06, 0.15, 0)
-  leftLeg.name = 'leftLeg'
-  stickFigure.add(leftLeg)
+  const leftLegMesh = new THREE.Mesh(legGeo, darkGrayMat)
+  leftLegMesh.position.set(-0.06, 0.15, 0)
+  leftLegMesh.name = 'leftLeg'
+  stickFigure.add(leftLegMesh)
 
-  const rightLeg = new THREE.Mesh(legGeo, darkGrayMat.clone())
-  rightLeg.position.set(0.06, 0.15, 0)
-  rightLeg.name = 'rightLeg'
-  stickFigure.add(rightLeg)
+  const rightLegMesh = new THREE.Mesh(legGeo, darkGrayMat)
+  rightLegMesh.position.set(0.06, 0.15, 0)
+  rightLegMesh.name = 'rightLeg'
+  stickFigure.add(rightLegMesh)
 
   const capeGeo = new THREE.PlaneGeometry(0.5, 0.7, 6, 12)
   const capeMat = new THREE.MeshToonMaterial({
@@ -553,6 +559,15 @@ function createStickFigure(toonGradientMap: THREE.DataTexture) {
   cape.name = 'cape'
   stickFigure.add(cape)
 
+  const capePositions = cape.geometry.getAttribute('position')
+  cape.userData.originalPositions = new Float32Array(capePositions.array)
+
+  leftLeg = stickFigure.getObjectByName('leftLeg')!
+  rightLeg = stickFigure.getObjectByName('rightLeg')!
+  leftArm = stickFigure.getObjectByName('leftArm')!
+  rightArm = stickFigure.getObjectByName('rightArm')!
+  capeMesh = cape
+
   // 側面朝向相機（面向左走）
   stickFigure.rotation.y = Math.PI / 2
   stickFigure.position.set(0, EARTH_Y + EARTH_RADIUS, 0)
@@ -562,30 +577,24 @@ function createStickFigure(toonGradientMap: THREE.DataTexture) {
 
 function animate() {
   animationId = requestAnimationFrame(animate)
+  const now = Date.now() * 0.001
 
   if (earth) {
     earth.rotation.z -= 0.0008
   }
 
-  const geometryStars = scene.getObjectByName('geometryStars') as THREE.Group | undefined
-  if (geometryStars) {
-    const time = Date.now() * 0.001
-    geometryStars.children.forEach((child) => {
+  if (geometryStarsGroup) {
+    geometryStarsGroup.children.forEach((child) => {
       if (child.userData.twinkle && child instanceof THREE.Mesh) {
         if (child.material instanceof THREE.MeshToonMaterial) {
-          child.material.opacity = 0.5 + Math.sin(time * child.userData.twinkleSpeed + child.userData.twinkleOffset) * 0.4
+          child.material.opacity = 0.5 + Math.sin(now * child.userData.twinkleSpeed + child.userData.twinkleOffset) * 0.4
         }
       }
     })
   }
 
   if (stickFigure) {
-    const walkTime = Date.now() * 0.001 * 1.5
-
-    const leftLeg = stickFigure.getObjectByName('leftLeg')
-    const rightLeg = stickFigure.getObjectByName('rightLeg')
-    const leftArm = stickFigure.getObjectByName('leftArm')
-    const rightArm = stickFigure.getObjectByName('rightArm')
+    const walkTime = now * 1.5
 
     if (leftLeg) leftLeg.rotation.x = Math.sin(walkTime) * 0.3
     if (rightLeg) rightLeg.rotation.x = Math.sin(walkTime + Math.PI) * 0.3
@@ -594,33 +603,26 @@ function animate() {
 
     stickFigure.position.y = EARTH_Y + EARTH_RADIUS + Math.abs(Math.sin(walkTime * 2)) * 0.02
 
-    const cape = stickFigure.getObjectByName('cape')
-    if (cape && cape instanceof THREE.Mesh) {
-      const capeGeo = cape.geometry as THREE.BufferGeometry
+    if (capeMesh) {
+      const capeGeo = capeMesh.geometry as THREE.BufferGeometry
       const posAttr = capeGeo.getAttribute('position')
-      const time = Date.now() * 0.003
-
-      if (!cape.userData.originalPositions) {
-        cape.userData.originalPositions = new Float32Array(posAttr.array)
-      }
-      const original = cape.userData.originalPositions as Float32Array
+      const original = capeMesh.userData.originalPositions as Float32Array
 
       for (let i = 0; i < posAttr.count; i++) {
         const ox = original[i * 3] ?? 0
         const oy = original[i * 3 + 1] ?? 0
         const oz = original[i * 3 + 2] ?? 0
         const distFromTop = 0.25 - oy
-        const wave = Math.sin(time + distFromTop * 5) * distFromTop * 0.15
+        const wave = Math.sin(now * 3 + distFromTop * 5) * distFromTop * 0.15
         posAttr.setZ(i, oz - Math.abs(wave) - distFromTop * 0.1)
-        posAttr.setX(i, ox + Math.sin(time * 0.7 + distFromTop * 3) * distFromTop * 0.05)
+        posAttr.setX(i, ox + Math.sin(now * 3 * 0.7 + distFromTop * 3) * distFromTop * 0.05)
       }
       posAttr.needsUpdate = true
     }
   }
 
-  const now = Date.now() * 0.001
-  if (sketchPass) sketchPass.uniforms.uTime.value = now
-  if (paperPass) paperPass.uniforms.uTime.value = now
+  if (sketchPass) sketchPass.uniforms['uTime']!.value = now
+  if (paperPass) paperPass.uniforms['uTime']!.value = now
 
   composer.render()
 }
@@ -628,12 +630,12 @@ function animate() {
 function onResize() {
   if (!renderer || !camera) return
   if (!containerRef.value) return
-  camera.aspect = 9 / 20
+  camera.aspect = SCENE_ASPECT
   camera.updateProjectionMatrix()
   renderer.setSize(containerRef.value.clientWidth, containerRef.value.clientHeight)
   composer.setSize(containerRef.value.clientWidth, containerRef.value.clientHeight)
   if (sketchPass) {
-    sketchPass.uniforms.uResolution.value.set(containerRef.value.clientWidth, containerRef.value.clientHeight)
+    sketchPass.uniforms['uResolution']!.value.set(containerRef.value.clientWidth, containerRef.value.clientHeight)
   }
 }
 

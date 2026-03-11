@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
-
-const ASPECT = 9 / 20
+import { SCENE_ASPECT } from '@/constants/scene'
 
 const frameWidth = ref(0)
 const frameHeight = ref(0)
@@ -11,7 +10,7 @@ function calculateSize() {
   const availableWidth = window.innerWidth - 32
   const availableHeight = window.innerHeight - 24
 
-  const candidateWidth = availableHeight * ASPECT
+  const candidateWidth = availableHeight * SCENE_ASPECT
 
   if (candidateWidth <= availableWidth) {
     frameWidth.value = candidateWidth
@@ -19,7 +18,7 @@ function calculateSize() {
   }
   else {
     frameWidth.value = availableWidth
-    frameHeight.value = availableWidth / ASPECT
+    frameHeight.value = availableWidth / SCENE_ASPECT
   }
 }
 

@@ -3,7 +3,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  overflow: auto;
+  overflow: hidden;
   background-color: #b8b2ac;
   background-image:
     radial-gradient(ellipse at 20% 50%, rgba(200,190,180,0.25) 0%, transparent 50%),
