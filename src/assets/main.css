@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  background-color: #b8b2ac;
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(200,190,180,0.25) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(180,170,160,0.2) 0%, transparent 50%);
+}
