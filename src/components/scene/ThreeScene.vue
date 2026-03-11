@@ -10,6 +10,9 @@ import { SCENE_ASPECT } from '@/constants/scene'
 
 const EARTH_RADIUS = 4
 const EARTH_Y = -5.8
+const MOON_X = 2
+const MOON_Y = 6.0
+const MOON_Z = -3
 
 const oceanColors: THREE.Color[] = [
   new THREE.Color('#1a3a5c'),
@@ -59,7 +62,6 @@ let composer: EffectComposer
 let outlineObjects: THREE.Object3D[] = []
 let sketchPass: ShaderPass
 let paperPass: ShaderPass
-let geometryStarsGroup: THREE.Group
 let moonMesh: THREE.Mesh
 let moonShadowMesh: THREE.Mesh
 let leftLeg: THREE.Object3D
@@ -72,6 +74,7 @@ interface StarParticle {
 }
 
 let starParticles: StarParticle[] = []
+let lastTimestamp = 0
 let rightLeg: THREE.Object3D
 let leftArm: THREE.Object3D
 let rightArm: THREE.Object3D
@@ -232,11 +235,11 @@ onMounted(() => {
   scene.add(directionalLight)
 
   const moonLight = new THREE.PointLight('#f5d76e', 0.5, 50)
-  moonLight.position.set(2, 6.0, -3)
+  moonLight.position.set(MOON_X, MOON_Y, MOON_Z)
   scene.add(moonLight)
 
-  createEarth(toonGradientMap)
-  createStars(toonGradientMap)
+  createEarth()
+  createStars()
   createMoon(toonGradientMap)
   createStickFigure(toonGradientMap)
   animate()
@@ -248,7 +251,7 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)] as T
 }
 
-function createEarth(toonGradientMap: THREE.DataTexture) {
+function createEarth() {
   let geometry: THREE.BufferGeometry = new THREE.IcosahedronGeometry(EARTH_RADIUS, 5)
   if (geometry.index) geometry = geometry.toNonIndexed()
 
@@ -323,7 +326,7 @@ function createEarth(toonGradientMap: THREE.DataTexture) {
   scene.add(atmosphere)
 }
 
-function createStars(toonGradientMap: THREE.DataTexture) {
+function createStars() {
   const starColors = [
     new THREE.Color('#ffffff'),
     new THREE.Color('#e8e8ff'),
@@ -412,7 +415,6 @@ function createStars(toonGradientMap: THREE.DataTexture) {
   }
 
   scene.add(starGroup)
-  geometryStarsGroup = starGroup
   outlineObjects.push(starGroup)
 }
 
@@ -438,11 +440,11 @@ function spawnStar(particle: StarParticle) {
   }
 
   // 計算月亮所在的格子並排除
-  const moonDist = 10 - (-3) // 月亮 z=-3
+  const moonDist = 10 - MOON_Z
   const moonHH = Math.tan(30 * Math.PI / 180) * moonDist
   const moonHW = moonHH * (9 / 20)
-  const moonNX = Math.min(Math.max((2 + moonHW) / (2 * moonHW), 0), 0.999)
-  const moonNY = Math.min(Math.max((6.0 - moonHH * 0.4) / (moonHH * 0.6), 0), 0.999)
+  const moonNX = Math.min(Math.max((MOON_X + moonHW) / (2 * moonHW), 0), 0.999)
+  const moonNY = Math.min(Math.max((MOON_Y - moonHH * 0.4) / (moonHH * 0.6), 0), 0.999)
   const moonCell = Math.floor(moonNY * ROWS) * COLS + Math.floor(moonNX * COLS)
 
   // 找出星星最少的格子們（排除月亮格子），隨機選一個
@@ -522,7 +524,7 @@ function createMoon(toonGradientMap: THREE.DataTexture) {
   })
 
   const moon = new THREE.Mesh(nonIndexed, moonMat)
-  moon.position.set(2, 6.0, -3)
+  moon.position.set(MOON_X, MOON_Y, MOON_Z)
   scene.add(moon)
   moonMesh = moon
 
@@ -532,7 +534,7 @@ function createMoon(toonGradientMap: THREE.DataTexture) {
     color: '#0a0e27',
   })
   const shadow = new THREE.Mesh(shadowGeo, shadowMat)
-  shadow.position.set(2 - 0.25, 6.0, -2.8)
+  shadow.position.set(MOON_X - 0.25, MOON_Y, MOON_Z + 0.2)
   scene.add(shadow)
   moonShadowMesh = shadow
 }
@@ -616,9 +618,11 @@ function createStickFigure(toonGradientMap: THREE.DataTexture) {
   outlineObjects.push(stickFigure)
 }
 
-function animate() {
+function animate(timestamp: number = 0) {
   animationId = requestAnimationFrame(animate)
-  const now = Date.now() * 0.001
+  const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.1)
+  lastTimestamp = timestamp
+  const now = timestamp * 0.001
 
   if (earth) {
     earth.rotation.z -= 0.0008
@@ -636,12 +640,12 @@ function animate() {
   }
 
   // 星星粒子系統
-  const dt = 1 / 60
+  let aliveCount = starParticles.filter(p => p.life > 0).length
   for (const particle of starParticles) {
     if (particle.life <= 0) {
-      const aliveCount = starParticles.filter(p => p.life > 0).length
       if (aliveCount < 15 && Math.random() < 0.05) {
         spawnStar(particle)
+        aliveCount++
       }
       continue
     }
@@ -726,6 +730,19 @@ function onResize() {
 onUnmounted(() => {
   if (animationId) cancelAnimationFrame(animationId)
   window.removeEventListener('resize', onResize)
+
+  scene?.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      object.geometry?.dispose()
+      if (object.material instanceof THREE.Material) {
+        object.material.dispose()
+      }
+      else if (Array.isArray(object.material)) {
+        object.material.forEach(m => m.dispose())
+      }
+    }
+  })
+
   composer?.dispose()
   renderer?.dispose()
 })
