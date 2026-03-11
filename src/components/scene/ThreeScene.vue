@@ -63,7 +63,6 @@ let outlineObjects: THREE.Object3D[] = []
 let sketchPass: ShaderPass
 let paperPass: ShaderPass
 let moonMesh: THREE.Mesh
-let moonShadowMesh: THREE.Mesh
 let leftLeg: THREE.Object3D
 
 interface StarParticle {
@@ -79,6 +78,7 @@ let rightLeg: THREE.Object3D
 let leftArm: THREE.Object3D
 let rightArm: THREE.Object3D
 let capeMesh: THREE.Mesh
+let bgShaderMaterial: THREE.ShaderMaterial
 
 const COMMON_VERTEX_SHADER = `
   varying vec2 vUv;
@@ -182,7 +182,6 @@ onMounted(() => {
   const toonGradientMap = createToonGradientMap()
 
   scene = new THREE.Scene()
-  scene.background = new THREE.Color('#0a0e27')
 
   camera = new THREE.PerspectiveCamera(60, SCENE_ASPECT, 0.1, 2000)
   camera.position.set(0, 0, 10)
@@ -238,9 +237,71 @@ onMounted(() => {
   moonLight.position.set(MOON_X, MOON_Y, MOON_Z)
   scene.add(moonLight)
 
+  // 夢幻漸層天空背景
+  const bgGeometry = new THREE.PlaneGeometry(2, 2)
+  const bgMaterial = new THREE.ShaderMaterial({
+    depthWrite: false,
+    depthTest: false,
+    uniforms: {
+      uTime: { value: 0.0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position.xy, 0.9999, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+      }
+
+      void main() {
+        float y = vUv.y;
+
+        // 三段漸層：頂部深空 → 中間靛紫 → 底部深青
+        vec3 deepSpace = vec3(0.002, 0.002, 0.01);
+        vec3 midPurple = vec3(0.015, 0.01, 0.04);
+        vec3 horizonTeal = vec3(0.01, 0.02, 0.035);
+
+        vec3 color;
+        if (y > 0.5) {
+          float t = (y - 0.5) / 0.5;
+          t = t * t;
+          color = mix(midPurple, deepSpace, t);
+        } else {
+          float t = y / 0.5;
+          t = sqrt(t);
+          color = mix(horizonTeal, midPurple, t);
+        }
+
+        // 大氣層光暈
+        float glowCenter = 0.35;
+        float glow = exp(-pow((y - glowCenter) / 0.15, 2.0));
+        vec3 glowColor = vec3(0.015, 0.025, 0.04);
+        color += glowColor * glow * 0.2;
+
+        // 極微量 noise 增加質感
+        float n = hash(vUv * 500.0 + vec2(uTime * 0.01)) * 0.004;
+        color += n;
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  })
+  const bgMesh = new THREE.Mesh(bgGeometry, bgMaterial)
+  bgMesh.renderOrder = -1000
+  bgMesh.frustumCulled = false
+  scene.add(bgMesh)
+  bgShaderMaterial = bgMaterial
+
   createEarth()
   createStars()
-  createMoon(toonGradientMap)
+  createMoon()
   createStickFigure(toonGradientMap)
   animate()
 
@@ -397,25 +458,29 @@ function createStars() {
     spawnStar(p)
     // 給不同生命值，模擬已經運行了一段時間
     p.life = 0.1 + Math.random() * 0.7 // 散佈在穩定和淡出階段
-    // 根據 life 設定正確的 scale 和 opacity
-    const mat = p.mesh.material
-    if (mat instanceof THREE.MeshBasicMaterial) {
-      const s = p.baseScale
-      p.mesh.scale.set(s, s, s)
-      if (p.life > 0.8) {
-        const t = (1.0 - p.life) / 0.2
-        mat.opacity = 0.9 * t
-      } else if (p.life > 0.3) {
-        mat.opacity = 0.9
-      } else {
-        const t = p.life / 0.3
-        mat.opacity = 0.9 * t
-      }
-    }
+    applyStarAppearance(p)
   }
 
   scene.add(starGroup)
   outlineObjects.push(starGroup)
+}
+
+function applyStarAppearance(particle: StarParticle) {
+  const s = particle.baseScale
+  particle.mesh.scale.set(s, s, s)
+
+  const mat = particle.mesh.material
+  if (!(mat instanceof THREE.MeshBasicMaterial)) return
+
+  if (particle.life > 0.8) {
+    const t = (1.0 - particle.life) / 0.2
+    mat.opacity = 0.9 * t
+  } else if (particle.life > 0.3) {
+    mat.opacity = 0.9
+  } else {
+    const t = particle.life / 0.3
+    mat.opacity = 0.9 * t
+  }
 }
 
 function spawnStar(particle: StarParticle) {
@@ -492,51 +557,112 @@ function spawnStar(particle: StarParticle) {
   }
 }
 
-function createMoon(toonGradientMap: THREE.DataTexture) {
-  // 弦月 = 黃色低多邊形球 + 背景色球蓋住右半邊
-  const moonGeo = new THREE.SphereGeometry(0.8, 24, 18)
-  const nonIndexed = moonGeo.index ? moonGeo.toNonIndexed() : moonGeo
+function createMoon() {
+  const moonGeo = new THREE.PlaneGeometry(2.0, 2.0)
+  const moonMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      uTime: { value: 0.0 },
+      uEmissiveIntensity: { value: 0.8 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uEmissiveIntensity;
+      varying vec2 vUv;
 
-  const posAttr = nonIndexed.getAttribute('position')
-  const colors = new Float32Array(posAttr.count * 3)
-  const moonColors: THREE.Color[] = [
-    new THREE.Color('#f5d76e'),
-    new THREE.Color('#f0c040'),
-    new THREE.Color('#e8b830'),
-    new THREE.Color('#d4a520'),
-  ]
+      // 簡易 2D noise 用於月球表面紋理
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+      }
 
-  for (let i = 0; i < posAttr.count; i += 3) {
-    const color = pickRandom(moonColors)
-    for (let j = 0; j < 3; j++) {
-      colors[(i + j) * 3] = color.r
-      colors[(i + j) * 3 + 1] = color.g
-      colors[(i + j) * 3 + 2] = color.b
-    }
-  }
-  nonIndexed.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
 
-  const moonMat = new THREE.MeshToonMaterial({
-    vertexColors: true,
-    emissive: new THREE.Color('#f5d76e'),
-    emissiveIntensity: 0.8,
-    gradientMap: toonGradientMap,
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float a = 0.5;
+        for (int i = 0; i < 4; i++) {
+          v += a * noise(p);
+          p *= 2.0;
+          a *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        vec2 uv = vUv * 2.0 - 1.0;
+
+        float mainCircle = length(uv);
+
+        vec2 maskCenter = vec2(-0.35, 0.0);
+        float maskCircle = length(uv - maskCenter);
+
+        float moonRadius = 0.7;
+        float maskRadius = 0.65;
+
+        float moon = smoothstep(moonRadius + 0.02, moonRadius - 0.02, mainCircle);
+        float mask = smoothstep(maskRadius - 0.02, maskRadius + 0.02, maskCircle);
+        float crescent = moon * mask;
+
+        if (crescent < 0.01) discard;
+
+        // 月球表面基色：亮面與暗面
+        vec3 brightColor = vec3(0.96, 0.87, 0.50);
+        vec3 darkColor = vec3(0.65, 0.55, 0.28);
+
+        // 大區域明暗斑塊（月海 vs 高地）
+        float regions = fbm(uv * 3.0 + vec2(1.5, 2.8));
+        float base = smoothstep(0.35, 0.65, regions);
+        vec3 color = mix(darkColor, brightColor, base);
+
+        // 隕石坑：用多個固定位置的圓形凹陷
+        float crater1 = smoothstep(0.12, 0.08, length(uv - vec2(0.15, 0.2)));
+        float crater2 = smoothstep(0.09, 0.06, length(uv - vec2(0.35, -0.1)));
+        float crater3 = smoothstep(0.07, 0.04, length(uv - vec2(0.1, -0.15)));
+        float crater4 = smoothstep(0.06, 0.03, length(uv - vec2(0.3, 0.25)));
+        float crater5 = smoothstep(0.10, 0.06, length(uv - vec2(0.25, 0.05)));
+        float craterMask = max(max(max(crater1, crater2), max(crater3, crater4)), crater5);
+        color = mix(color, darkColor * 0.7, craterMask * 0.6);
+
+        // 細節 noise 增加質感
+        float detail = fbm(uv * 12.0 + vec2(8.1, 5.3));
+        color *= (0.85 + detail * 0.3);
+
+        // 邊緣偏暗（模擬球面光照衰減）
+        float edge = smoothstep(0.3, 0.7, mainCircle / moonRadius);
+        color *= (1.0 - edge * 0.25);
+
+        color *= uEmissiveIntensity;
+
+        // 額外 bloom 增益：當 intensity 高時推高輸出值讓 bloom pass 偵測到
+        float bloomBoost = smoothstep(0.9, 1.2, uEmissiveIntensity) * 1.0;
+        vec3 finalColor = color + color * bloomBoost;
+
+        gl_FragColor = vec4(finalColor, crescent);
+      }
+    `,
   })
 
-  const moon = new THREE.Mesh(nonIndexed, moonMat)
+  const moon = new THREE.Mesh(moonGeo, moonMat)
   moon.position.set(MOON_X, MOON_Y, MOON_Z)
   scene.add(moon)
   moonMesh = moon
-
-  // 背景色球體蓋住右邊，形成弦月
-  const shadowGeo = new THREE.SphereGeometry(0.78, 32, 32)
-  const shadowMat = new THREE.MeshBasicMaterial({
-    color: '#0a0e27',
-  })
-  const shadow = new THREE.Mesh(shadowGeo, shadowMat)
-  shadow.position.set(MOON_X - 0.25, MOON_Y, MOON_Z + 0.2)
-  scene.add(shadow)
-  moonShadowMesh = shadow
 }
 
 function createStickFigure(toonGradientMap: THREE.DataTexture) {
@@ -630,17 +756,24 @@ function animate(timestamp: number = 0) {
 
   // 月亮呼吸效果
   if (moonMesh) {
-    const breathe = Math.sin(now * 0.5) * 0.5 + 0.5 // 0~1 慢速正弦波
-    const scale = 1.0 + breathe * 0.05 // 1.0 ~ 1.05 微微放大縮小
+    const breathe = Math.sin(now * 0.25) * 0.5 + 0.5
+    const scale = 1.0 + breathe * 0.05
     moonMesh.scale.set(scale, scale, scale)
-    moonShadowMesh.scale.set(scale, scale, scale)
-    if (moonMesh.material instanceof THREE.MeshToonMaterial) {
-      moonMesh.material.emissiveIntensity = 0.4 + breathe * 0.7 // 0.4 ~ 1.1
+    if (moonMesh.material instanceof THREE.ShaderMaterial) {
+      if (moonMesh.material.uniforms['uEmissiveIntensity']) {
+        moonMesh.material.uniforms['uEmissiveIntensity']!.value = 0.6 + breathe * 0.5
+      }
+      if (moonMesh.material.uniforms['uTime']) {
+        moonMesh.material.uniforms['uTime']!.value = now
+      }
     }
   }
 
   // 星星粒子系統
-  let aliveCount = starParticles.filter(p => p.life > 0).length
+  let aliveCount = 0
+  for (const p of starParticles) {
+    if (p.life > 0) aliveCount++
+  }
   for (const particle of starParticles) {
     if (particle.life <= 0) {
       if (aliveCount < 15 && Math.random() < 0.05) {
@@ -658,27 +791,7 @@ function animate(timestamp: number = 0) {
       continue
     }
 
-    const mat = particle.mesh.material
-    if (!(mat instanceof THREE.MeshBasicMaterial)) continue
-
-    const s = particle.baseScale
-    particle.mesh.scale.set(s, s, s)
-
-    // 淡入階段：life 從 1.0 到 0.8（前 20% 時間）
-    if (particle.life > 0.8) {
-      const t = (1.0 - particle.life) / 0.2 // 0 → 1
-      mat.opacity = 0.9 * t
-    }
-    // 穩定階段
-    else if (particle.life > 0.3) {
-      mat.opacity = 0.9
-    }
-    // 淡出階段：life 從 0.3 到 0（最後 30% 時間）
-    else {
-      const t = particle.life / 0.3 // 1 → 0
-      mat.opacity = 0.9 * t
-    }
-
+    applyStarAppearance(particle)
   }
 
   if (stickFigure) {
@@ -709,6 +822,7 @@ function animate(timestamp: number = 0) {
     }
   }
 
+  if (bgShaderMaterial) bgShaderMaterial.uniforms['uTime']!.value = now
   if (sketchPass) sketchPass.uniforms['uTime']!.value = now
   if (paperPass) paperPass.uniforms['uTime']!.value = now
 
