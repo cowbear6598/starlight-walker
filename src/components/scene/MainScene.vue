@@ -1,0 +1,114 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import * as THREE from 'three'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { SCENE_ASPECT, MOON_X, MOON_Y, MOON_Z } from '@/constants/scene'
+import { SketchPostShader } from '@/shaders/SketchPostShader'
+import { PaperTextureShader } from '@/shaders/PaperTextureShader'
+import { BackgroundShader } from '@/shaders/BackgroundShader'
+import { createEarth } from '@/scene/createEarth'
+import { createMoon } from '@/scene/createMoon'
+import { createStars } from '@/scene/createStars'
+import { createStickFigure } from '@/scene/createStickFigure'
+import { useSceneAnimation } from '@/composables/useSceneAnimation'
+
+const containerRef = ref<HTMLDivElement>()
+
+onMounted(() => {
+  if (!containerRef.value) return
+
+  const { clientWidth, clientHeight } = containerRef.value
+
+  const scene = new THREE.Scene()
+  const camera = new THREE.PerspectiveCamera(60, SCENE_ASPECT, 0.1, 2000)
+  camera.position.set(0, 0, 10)
+  camera.lookAt(0, 0, 0)
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true })
+  renderer.setSize(clientWidth, clientHeight)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = 1.2
+  containerRef.value.appendChild(renderer.domElement)
+
+  const outlineObjects: THREE.Object3D[] = []
+
+  const composer = new EffectComposer(renderer)
+  composer.addPass(new RenderPass(scene, camera))
+
+  const outlinePass = new OutlinePass(
+    new THREE.Vector2(clientWidth, clientHeight),
+    scene,
+    camera,
+  )
+  outlinePass.selectedObjects = outlineObjects
+  outlinePass.edgeStrength = 3.0
+  outlinePass.edgeGlow = 0.0
+  outlinePass.edgeThickness = 1.0
+  outlinePass.visibleEdgeColor = new THREE.Color('#2a2a2a')
+  outlinePass.hiddenEdgeColor = new THREE.Color('#2a2a2a')
+  composer.addPass(outlinePass)
+
+  const sketchPass = new ShaderPass(SketchPostShader)
+  sketchPass.uniforms['uResolution']!.value.set(clientWidth, clientHeight)
+  composer.addPass(sketchPass)
+
+  const paperPass = new ShaderPass(PaperTextureShader)
+  composer.addPass(paperPass)
+
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(clientWidth, clientHeight),
+    0.3,
+    0.3,
+    0.6,
+  )
+  composer.addPass(bloomPass)
+
+  scene.add(new THREE.AmbientLight('#aabbcc', 0.8))
+  const directionalLight = new THREE.DirectionalLight('#ffffff', 1.0)
+  directionalLight.position.set(3, 6, 10)
+  scene.add(directionalLight)
+  const moonLight = new THREE.PointLight('#f5d76e', 0.5, 50)
+  moonLight.position.set(MOON_X, MOON_Y, MOON_Z)
+  scene.add(moonLight)
+
+  const bgGeometry = new THREE.PlaneGeometry(2, 2)
+  const bgMaterial = new THREE.ShaderMaterial({
+    depthWrite: false,
+    depthTest: false,
+    ...BackgroundShader,
+  })
+  const bgMesh = new THREE.Mesh(bgGeometry, bgMaterial)
+  bgMesh.renderOrder = -1000
+  bgMesh.frustumCulled = false
+  scene.add(bgMesh)
+
+  const earth = createEarth(scene, outlineObjects)
+  const starParticles = createStars(scene, outlineObjects)
+  const moonMesh = createMoon(scene)
+  const stickFigure = createStickFigure(scene, outlineObjects)
+
+  useSceneAnimation({
+    containerRef,
+    renderer,
+    scene,
+    camera,
+    composer,
+    earth,
+    moonMesh,
+    stickFigure,
+    starParticles,
+    sketchPass,
+    paperPass,
+    bgShaderMaterial: bgMaterial,
+  })
+})
+</script>
+
+<template>
+  <div ref="containerRef" class="w-full h-full" />
+</template>

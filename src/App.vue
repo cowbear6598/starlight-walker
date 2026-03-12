@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import GalleryFrame from '@/components/scene/GalleryFrame.vue'
-import ThreeScene from '@/components/scene/ThreeScene.vue'
+import MainScene from '@/components/scene/MainScene.vue'
 </script>
 
 <template>
   <div class="w-screen h-screen flex items-center justify-center">
     <GalleryFrame>
-      <ThreeScene />
+      <MainScene />
     </GalleryFrame>
   </div>
 </template>
