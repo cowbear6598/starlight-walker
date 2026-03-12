@@ -8,10 +8,7 @@ import {
   oceanColors,
   snowColors,
 } from '@/scene/terrainColors'
-
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)] as T
-}
+import { pickRandom } from '@/utils/random'
 
 const POLAR_PHI_THRESHOLD = 1.0
 const LAND_THETA_MIN = 0.8

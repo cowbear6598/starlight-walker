@@ -1,15 +1,12 @@
 import * as THREE from 'three'
 import { CAMERA_HALF_FOV_TAN, CAMERA_Z, MOON_X, MOON_Y, MOON_Z, SCENE_ASPECT } from '@/constants/scene'
+import { pickRandom } from '@/utils/random'
 
 export interface StarParticle {
   mesh: THREE.Mesh
   life: number
   maxLife: number
   baseScale: number
-}
-
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)] as T
 }
 
 function createStarShape(points: number, outerR: number, innerR: number): THREE.Shape {
@@ -53,12 +50,18 @@ function createStarMesh(geometries: THREE.BufferGeometry[], starColors: THREE.Co
 
 const COLS = 3
 const ROWS = 2
+// 星星生成 Y 軸下界係數：0.0 = 畫面上半 50%，0.4 = 上方 30%，當前 0.2 = 上方 40%
+const STAR_Y_BOTTOM_FACTOR = 0.2
+
+function normalizeStarY(worldY: number, halfHeight: number): number {
+  return Math.min(Math.max((worldY - halfHeight * STAR_Y_BOTTOM_FACTOR) / (halfHeight * (1 - STAR_Y_BOTTOM_FACTOR)), 0), 0.999)
+}
 
 const MOON_DISTANCE_FROM_CAMERA = CAMERA_Z - MOON_Z
 const MOON_HALF_HEIGHT = CAMERA_HALF_FOV_TAN * MOON_DISTANCE_FROM_CAMERA
 const MOON_HALF_WIDTH = MOON_HALF_HEIGHT * SCENE_ASPECT
 const MOON_NORMALIZED_X = Math.min(Math.max((MOON_X + MOON_HALF_WIDTH) / (2 * MOON_HALF_WIDTH), 0), 0.999)
-const MOON_NORMALIZED_Y = Math.min(Math.max((MOON_Y - MOON_HALF_HEIGHT * 0.4) / (MOON_HALF_HEIGHT * 0.6), 0), 0.999)
+const MOON_NORMALIZED_Y = normalizeStarY(MOON_Y, MOON_HALF_HEIGHT)
 const MOON_CELL = Math.floor(MOON_NORMALIZED_Y * ROWS) * COLS + Math.floor(MOON_NORMALIZED_X * COLS)
 
 function buildStarGridDensity(
@@ -77,7 +80,7 @@ function buildStarGridDensity(
     const halfHeight = CAMERA_HALF_FOV_TAN * distanceFromCamera
     const halfWidth = halfHeight * SCENE_ASPECT
     const normalizedX = Math.min(Math.max((worldX + halfWidth) / (2 * halfWidth), 0), 0.999)
-    const normalizedY = Math.min(Math.max((worldY - halfHeight * 0.4) / (halfHeight * 0.6), 0), 0.999)
+    const normalizedY = normalizeStarY(worldY, halfHeight)
     const col = Math.floor(normalizedX * gridCols)
     const row = Math.floor(normalizedY * gridRows)
     grid[row * gridCols + col]++
@@ -108,7 +111,7 @@ function calculateWorldPositionFromCell(
   const halfHeight = CAMERA_HALF_FOV_TAN * distanceFromCamera
   const halfWidth = halfHeight * SCENE_ASPECT
   const yMax = halfHeight
-  const yMin = halfHeight * 0.4
+  const yMin = halfHeight * STAR_Y_BOTTOM_FACTOR
 
   const nxMin = chosenCol / gridCols
   const nxMax = (chosenCol + 1) / gridCols
