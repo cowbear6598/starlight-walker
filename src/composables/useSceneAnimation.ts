@@ -23,6 +23,39 @@ export interface SceneRefs {
   bgShaderMaterial: THREE.ShaderMaterial
 }
 
+const CAPE_Z_WAVES = [
+  { timeFreq: 2.3, spaceFreq: 4.0, seedMul: 1.0, amplitude: 0.12 },
+  { timeFreq: 3.7, spaceFreq: 6.5, seedMul: 1.3, amplitude: 0.07 },
+  { timeFreq: 5.1, spaceFreq: 2.8, seedMul: 0.7, amplitude: 0.04 },
+] as const
+
+const CAPE_X_WAVES = [
+  { timeFreq: 1.9, spaceFreq: 3.2, seedMul: 0.5, amplitude: 0.04 },
+  { timeFreq: 4.3, spaceFreq: 5.1, seedMul: 1.1, amplitude: 0.02 },
+] as const
+
+function easeInOutSine(t: number): number {
+  return -(Math.cos(Math.PI * t) - 1) / 2
+}
+
+function smoothWalk(time: number): number {
+  const raw = Math.sin(time)
+  return Math.sign(raw) * Math.pow(Math.abs(raw), 0.6)
+}
+
+function calculateWave(
+  waves: readonly { timeFreq: number; spaceFreq: number; seedMul: number; amplitude: number }[],
+  t: number,
+  distFromTop: number,
+  seed: number,
+): number {
+  let result = 0
+  for (const w of waves) {
+    result += Math.sin(t * w.timeFreq + distFromTop * w.spaceFreq + seed * w.seedMul) * w.amplitude
+  }
+  return result
+}
+
 export function useSceneAnimation(refs: SceneRefs): void {
   let animationId = 0
   let lastTimestamp = 0
@@ -55,56 +88,120 @@ export function useSceneAnimation(refs: SceneRefs): void {
 
   function animateStarParticles(deltaTimeSeconds: number): void {
     let aliveCount = 0
-    for (const particle of refs.starParticles) {
-      if (particle.life > 0) aliveCount++
-    }
 
     for (const particle of refs.starParticles) {
-      if (particle.life <= 0) {
-        if (aliveCount < 15 && Math.random() < 0.05) {
-          spawnStar(particle, refs.starParticles)
+      if (particle.life > 0) {
+        particle.life -= deltaTimeSeconds / particle.maxLife
+
+        if (particle.life <= 0) {
+          particle.life = 0
+          particle.mesh.visible = false
+        } else {
+          applyStarAppearance(particle)
           aliveCount++
         }
-        continue
       }
-
-      particle.life -= deltaTimeSeconds / particle.maxLife
-
-      if (particle.life <= 0) {
-        particle.life = 0
-        particle.mesh.visible = false
-        continue
-      }
-
-      applyStarAppearance(particle)
     }
+
+    // 死亡粒子有機率重生
+    for (const particle of refs.starParticles) {
+      if (particle.life <= 0 && aliveCount < 15 && Math.random() < 0.05) {
+        spawnStar(particle, refs.starParticles)
+        aliveCount++
+      }
+    }
+  }
+
+  function animateLimbs(walkTime: number, walkCycle: number, walkCycleOpposite: number): void {
+    const {
+      leftThighPivot,
+      leftShinPivot,
+      rightThighPivot,
+      rightShinPivot,
+      leftUpperArmPivot,
+      leftForearmPivot,
+      rightUpperArmPivot,
+      rightForearmPivot,
+    } = refs.stickFigure
+
+    leftThighPivot.rotation.x = walkCycle * 0.25
+    rightThighPivot.rotation.x = walkCycleOpposite * 0.25
+
+    leftShinPivot.rotation.x = -Math.max(0, walkCycle) * 0.45 - 0.05
+    rightShinPivot.rotation.x = -Math.max(0, walkCycleOpposite) * 0.45 - 0.05
+
+    leftUpperArmPivot.rotation.x = 0.2
+    leftUpperArmPivot.rotation.z = 0.15
+    leftForearmPivot.rotation.x = 1.3
+
+    rightUpperArmPivot.rotation.x = smoothWalk(walkTime + 0.3) * 0.15
+    rightForearmPivot.rotation.x = -0.1 - (Math.sin(walkTime + 0.3) * 0.5 + 0.5) * 0.15
+  }
+
+  function animateLantern(walkTime: number, currentTimeSeconds: number): void {
+    const { lanternGroup, lanternLight, lanternOrb } = refs.stickFigure
+
+    const lanternSwing = Math.sin(walkTime * 2) * 0.06
+    lanternGroup.rotation.z = lanternSwing
+    lanternGroup.rotation.x = -1.5 + Math.sin(walkTime * 2 + 0.5) * 0.04
+
+    const orbPulse = Math.sin(currentTimeSeconds * 2.5)
+    const orbBreathe = orbPulse * 0.08 + 0.25
+
+    const orbMaterial = lanternOrb.material
+    if (orbMaterial instanceof THREE.MeshBasicMaterial) {
+      orbMaterial.opacity = orbBreathe
+    }
+
+    lanternLight.intensity = 0.25 + orbPulse * 0.08
   }
 
   function animateStickFigure(currentTimeSeconds: number): void {
-    const { stickFigure, leftLeg, rightLeg, leftArm, rightArm } = refs.stickFigure
-    const walkTime = currentTimeSeconds * 1.5
+    const { stickFigure, body, head } = refs.stickFigure
 
-    leftLeg.rotation.x = Math.sin(walkTime) * 0.3
-    rightLeg.rotation.x = Math.sin(walkTime + Math.PI) * 0.3
-    leftArm.rotation.x = Math.sin(walkTime + Math.PI) * 0.2
-    rightArm.rotation.x = Math.sin(walkTime) * 0.2
+    const walkTime = currentTimeSeconds * 1.2
+    const walkCycle = smoothWalk(walkTime)
+    const walkCycleOpposite = smoothWalk(walkTime + Math.PI)
 
-    stickFigure.position.y = EARTH_Y + EARTH_RADIUS + Math.abs(Math.sin(walkTime * 2)) * 0.02
+    animateLimbs(walkTime, walkCycle, walkCycleOpposite)
+
+    body.rotation.x = 0.03 + walkCycle * 0.015
+    body.rotation.z = smoothWalk(walkTime * 2) * 0.02
+
+    head.rotation.x = -0.05 + Math.sin(walkTime * 2) * 0.02
+    head.rotation.y = Math.sin(walkTime * 0.3) * 0.04
+
+    stickFigure.position.y = EARTH_Y + EARTH_RADIUS + (1 - Math.cos(walkTime * 2)) * 0.015
+
+    animateLantern(walkTime, currentTimeSeconds)
   }
 
   function animateCape(currentTimeSeconds: number): void {
-    const { capeMesh, originalCapePositions: original } = refs.stickFigure
-    const capeGeo = capeMesh.geometry as THREE.BufferGeometry
+    const { capeMesh, originalCapePositions: original, capeVertexSeeds: seeds } = refs.stickFigure
+    const capeGeo = capeMesh.geometry
+    if (!(capeGeo instanceof THREE.BufferGeometry)) return
     const posAttr = capeGeo.getAttribute('position')
+    const t = currentTimeSeconds
 
     for (let i = 0; i < posAttr.count; i++) {
       const originalX = original[i * 3] ?? 0
       const originalY = original[i * 3 + 1] ?? 0
       const originalZ = original[i * 3 + 2] ?? 0
-      const distFromTop = 0.25 - originalY
-      const noiseValue = Math.sin(currentTimeSeconds * 3 + distFromTop * 5) * distFromTop * 0.15
-      posAttr.setZ(i, originalZ - Math.abs(noiseValue) - distFromTop * 0.1)
-      posAttr.setX(i, originalX + Math.sin(currentTimeSeconds * 3 * 0.7 + distFromTop * 3) * distFromTop * 0.05)
+      const distFromTop = -originalY
+      const seed = seeds[i]!
+
+      // Z 方向主飄動
+      const zWave = calculateWave(CAPE_Z_WAVES, t, distFromTop, seed)
+      const zOffset = zWave * distFromTop + distFromTop * 0.2
+      posAttr.setZ(i, originalZ + Math.abs(zOffset) + distFromTop * 0.05)
+
+      // X 方向左右擺動
+      const xWave = calculateWave(CAPE_X_WAVES, t, distFromTop, seed)
+      posAttr.setX(i, originalX + xWave * distFromTop)
+
+      // Y 方向微小上下浮動
+      const yWave = Math.sin(t * 2.7 + seed * 0.9) * distFromTop * 0.015
+      posAttr.setY(i, originalY + yWave)
     }
     posAttr.needsUpdate = true
   }
@@ -133,13 +230,14 @@ export function useSceneAnimation(refs: SceneRefs): void {
 
   function onResize(): void {
     if (!refs.containerRef.value) return
-    const { clientWidth, clientHeight } = refs.containerRef.value
+    const w = Math.max(refs.containerRef.value.clientWidth, 1)
+    const h = Math.max(refs.containerRef.value.clientHeight, 1)
     refs.camera.aspect = SCENE_ASPECT
     refs.camera.updateProjectionMatrix()
-    refs.renderer.setSize(clientWidth, clientHeight)
-    refs.composer.setSize(clientWidth, clientHeight)
+    refs.renderer.setSize(w, h)
+    refs.composer.setSize(w, h)
     if (refs.sketchPass.uniforms['uResolution']) {
-      refs.sketchPass.uniforms['uResolution']!.value.set(clientWidth, clientHeight)
+      refs.sketchPass.uniforms['uResolution']!.value.set(w, h)
     }
   }
 
@@ -147,12 +245,18 @@ export function useSceneAnimation(refs: SceneRefs): void {
     refs.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return
       object.geometry?.dispose()
-      if (object.material instanceof THREE.Material) {
-        object.material.dispose()
-        return
-      }
-      if (Array.isArray(object.material)) {
-        object.material.forEach(m => m.dispose())
+
+      const materials = Array.isArray(object.material) ? object.material : [object.material]
+      for (const mat of materials) {
+        if (mat instanceof THREE.Material) {
+          // Dispose 所有 texture 屬性
+          for (const value of Object.values(mat)) {
+            if (value instanceof THREE.Texture) {
+              value.dispose()
+            }
+          }
+          mat.dispose()
+        }
       }
     })
   }
