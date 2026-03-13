@@ -11,57 +11,91 @@ import {
 import { pickRandom } from '@/utils/random'
 
 const POLAR_PHI_THRESHOLD = 1.0
-const LAND_THETA_MIN = 0.8
-const LAND_THETA_MAX = 2.8
-const LAND_PHI_MIN = 0.0
-const LAND_PHI_MAX = 1.3
-const SOUTH_LAND_THETA_MIN = -2.2
-const SOUTH_LAND_THETA_MAX = -0.1
-const SOUTH_LAND_PHI_MIN = -1.1
-const DESERT_THETA_MIN = -0.8
-const DESERT_THETA_MAX = 0.5
-const DESERT_PHI_MIN = -0.3
-const DESERT_PHI_MAX = 0.3
-const DEEP_FOREST_THETA_MIN = 2.5
-const DEEP_FOREST_THETA_MAX = 3.14
-const DEEP_FOREST_PHI_MIN = -0.5
-const DEEP_FOREST_PHI_MAX = 0.2
-const ISLAND_THETA_MIN = 0.0
-const ISLAND_THETA_MAX = 1.0
-const ISLAND_PHI_MIN = -0.8
-const ISLAND_PHI_MAX = -0.2
+const WALK_PATH_THETA_WIDTH = 0.4
 
-// 依據球面座標 theta（經度）和 phi（緯度）劃分地球表面各地理區域，
-// 讓地球呈現多樣地形而非全部海洋
-function classifyTerrain(theta: number, phi: number): THREE.Color {
+const BIOME_COUNT = 60
+
+type BiomeType = 'ocean' | 'land' | 'mountain' | 'desert' | 'deepForest'
+
+interface BiomeSeed {
+  theta: number
+  phi: number
+  type: BiomeType
+}
+
+function generateBiomeSeeds(): BiomeSeed[] {
+  const seeds: BiomeSeed[] = []
+
+  for (let i = 0; i < BIOME_COUNT; i++) {
+    const theta = Math.random() * Math.PI * 2 - Math.PI
+    const phi = Math.asin(Math.random() * 2 - 1)
+
+    const isOnWalkPath = Math.abs(theta) < WALK_PATH_THETA_WIDTH || Math.abs(theta) > (Math.PI - WALK_PATH_THETA_WIDTH)
+
+    let type: BiomeType
+    if (isOnWalkPath) {
+      const roll = Math.random()
+      if (roll < 0.35) type = 'land'
+      else if (roll < 0.55) type = 'desert'
+      else if (roll < 0.75) type = 'deepForest'
+      else type = 'mountain'
+    } else {
+      const roll = Math.random()
+      if (roll < 0.35) type = 'ocean'
+      else if (roll < 0.55) type = 'land'
+      else if (roll < 0.70) type = 'desert'
+      else if (roll < 0.85) type = 'deepForest'
+      else type = 'mountain'
+    }
+
+    seeds.push({ theta, phi, type })
+  }
+
+  return seeds
+}
+
+// 使用大圓距離（而非歐氏距離）讓 Voronoi 分區在球面上均勻分布
+function sphericalDistance(theta1: number, phi1: number, theta2: number, phi2: number): number {
+  const dTheta = theta1 - theta2
+  const cosPhi1 = Math.cos(phi1)
+  const cosPhi2 = Math.cos(phi2)
+  const sinPhi1 = Math.sin(phi1)
+  const sinPhi2 = Math.sin(phi2)
+  return Math.acos(
+    Math.min(1, Math.max(-1, sinPhi1 * sinPhi2 + cosPhi1 * cosPhi2 * Math.cos(dTheta)))
+  )
+}
+
+const BIOME_COLOR_MAP: Record<BiomeType, THREE.Color[]> = {
+  ocean: oceanColors,
+  land: landColors,
+  mountain: mountainColors,
+  desert: desertColors,
+  deepForest: deepForestColors,
+}
+
+function classifyTerrain(theta: number, phi: number, biomeSeeds: BiomeSeed[]): THREE.Color {
   if (phi > POLAR_PHI_THRESHOLD || phi < -POLAR_PHI_THRESHOLD) {
     return pickRandom(snowColors)
   }
 
-  if (theta > LAND_THETA_MIN && theta < LAND_THETA_MAX && phi > LAND_PHI_MIN && phi < LAND_PHI_MAX) {
-    return pickRandom(landColors)
+  let minDist = Infinity
+  let nearestType: BiomeType = 'ocean'
+
+  for (const seed of biomeSeeds) {
+    const dist = sphericalDistance(theta, phi, seed.theta, seed.phi)
+    if (dist < minDist) {
+      minDist = dist
+      nearestType = seed.type
+    }
   }
 
-  if (theta > SOUTH_LAND_THETA_MIN && theta < SOUTH_LAND_THETA_MAX && phi < LAND_PHI_MIN && phi > SOUTH_LAND_PHI_MIN) {
-    return Math.random() > 0.3 ? pickRandom(landColors) : pickRandom(mountainColors)
-  }
-
-  if (theta > DESERT_THETA_MIN && theta < DESERT_THETA_MAX && phi > DESERT_PHI_MIN && phi < DESERT_PHI_MAX) {
-    return pickRandom(desertColors)
-  }
-
-  if (theta > DEEP_FOREST_THETA_MIN && theta < DEEP_FOREST_THETA_MAX && phi > DEEP_FOREST_PHI_MIN && phi < DEEP_FOREST_PHI_MAX) {
-    return Math.random() > 0.4 ? pickRandom(deepForestColors) : pickRandom(oceanColors)
-  }
-
-  if (theta > ISLAND_THETA_MIN && theta < ISLAND_THETA_MAX && phi > ISLAND_PHI_MIN && phi < ISLAND_PHI_MAX) {
-    return Math.random() > 0.3 ? pickRandom(landColors) : pickRandom(mountainColors)
-  }
-
-  return pickRandom(oceanColors)
+  return pickRandom(BIOME_COLOR_MAP[nearestType])
 }
 
 export function createEarth(scene: THREE.Scene, outlineObjects: THREE.Object3D[]): THREE.Mesh {
+  const biomeSeeds = generateBiomeSeeds()
+
   let geometry: THREE.BufferGeometry = new THREE.IcosahedronGeometry(EARTH_RADIUS, 5)
   if (geometry.index) geometry = geometry.toNonIndexed()
 
@@ -73,10 +107,12 @@ export function createEarth(scene: THREE.Scene, outlineObjects: THREE.Object3D[]
     const cy = (positionAttr.getY(i) + positionAttr.getY(i + 1) + positionAttr.getY(i + 2)) / 3
     const cz = (positionAttr.getZ(i) + positionAttr.getZ(i + 1) + positionAttr.getZ(i + 2)) / 3
 
+    const len = Math.sqrt(cx * cx + cy * cy + cz * cz)
+    if (len === 0) continue
     const theta = Math.atan2(cz, cx)
-    const phi = Math.asin(cy / Math.sqrt(cx * cx + cy * cy + cz * cz))
+    const phi = Math.asin(cy / len)
 
-    const color = classifyTerrain(theta, phi)
+    const color = classifyTerrain(theta, phi, biomeSeeds)
 
     for (let j = 0; j < 3; j++) {
       colors[(i + j) * 3] = color.r
@@ -96,8 +132,7 @@ export function createEarth(scene: THREE.Scene, outlineObjects: THREE.Object3D[]
   scene.add(earth)
   outlineObjects.push(earth)
 
-  let atmosphereGeometry: THREE.BufferGeometry = new THREE.IcosahedronGeometry(EARTH_RADIUS + 0.2, 5)
-  if (atmosphereGeometry.index) atmosphereGeometry = atmosphereGeometry.toNonIndexed()
+  const atmosphereGeometry = new THREE.IcosahedronGeometry(EARTH_RADIUS + 0.2, 5)
   const atmosphereMaterial = new THREE.MeshBasicMaterial({
     color: '#4488aa',
     transparent: true,
