@@ -10,20 +10,26 @@ import {
 } from '@/scene/terrainColors'
 import { pickRandom } from '@/utils/random'
 
-const POLAR_PHI_THRESHOLD = 1.0
+export const POLAR_PHI_THRESHOLD = 1.0
 const WALK_PATH_THETA_WIDTH = 0.4
 
 const BIOME_COUNT = 60
 
-type BiomeType = 'ocean' | 'land' | 'mountain' | 'desert' | 'deepForest'
+export type BiomeType = 'ocean' | 'land' | 'mountain' | 'desert' | 'deepForest' | 'snow'
 
-interface BiomeSeed {
+export interface BiomeSeed {
   theta: number
   phi: number
   type: BiomeType
 }
 
-function generateBiomeSeeds(): BiomeSeed[] {
+export interface BiomeRegion {
+  type: BiomeType
+  theta: number
+  phi: number
+}
+
+export function generateBiomeSeeds(): BiomeSeed[] {
   const seeds: BiomeSeed[] = []
 
   for (let i = 0; i < BIOME_COUNT; i++) {
@@ -55,7 +61,7 @@ function generateBiomeSeeds(): BiomeSeed[] {
 }
 
 // 使用大圓距離（而非歐氏距離）讓 Voronoi 分區在球面上均勻分布
-function sphericalDistance(theta1: number, phi1: number, theta2: number, phi2: number): number {
+export function sphericalDistance(theta1: number, phi1: number, theta2: number, phi2: number): number {
   const dTheta = theta1 - theta2
   const cosPhi1 = Math.cos(phi1)
   const cosPhi2 = Math.cos(phi2)
@@ -72,12 +78,11 @@ const BIOME_COLOR_MAP: Record<BiomeType, THREE.Color[]> = {
   mountain: mountainColors,
   desert: desertColors,
   deepForest: deepForestColors,
+  snow: snowColors,
 }
 
-function classifyTerrain(theta: number, phi: number, biomeSeeds: BiomeSeed[]): THREE.Color {
-  if (phi > POLAR_PHI_THRESHOLD || phi < -POLAR_PHI_THRESHOLD) {
-    return pickRandom(snowColors)
-  }
+export function classifyBiome(theta: number, phi: number, biomeSeeds: BiomeSeed[]): BiomeType {
+  if (phi > POLAR_PHI_THRESHOLD || phi < -POLAR_PHI_THRESHOLD) return 'snow'
 
   let minDist = Infinity
   let nearestType: BiomeType = 'ocean'
@@ -90,10 +95,18 @@ function classifyTerrain(theta: number, phi: number, biomeSeeds: BiomeSeed[]): T
     }
   }
 
-  return pickRandom(BIOME_COLOR_MAP[nearestType])
+  return nearestType
 }
 
-export function createEarth(scene: THREE.Scene, outlineObjects: THREE.Object3D[]): THREE.Mesh {
+function classifyTerrain(theta: number, phi: number, biomeSeeds: BiomeSeed[]): THREE.Color {
+  const biomeType = classifyBiome(theta, phi, biomeSeeds)
+  return pickRandom(BIOME_COLOR_MAP[biomeType])
+}
+
+export function createEarth(
+  scene: THREE.Scene,
+  outlineObjects: THREE.Object3D[],
+): { earth: THREE.Mesh; biomeSeeds: BiomeSeed[] } {
   const biomeSeeds = generateBiomeSeeds()
 
   let geometry: THREE.BufferGeometry = new THREE.IcosahedronGeometry(EARTH_RADIUS, 5)
@@ -108,7 +121,7 @@ export function createEarth(scene: THREE.Scene, outlineObjects: THREE.Object3D[]
     const cz = (positionAttr.getZ(i) + positionAttr.getZ(i + 1) + positionAttr.getZ(i + 2)) / 3
 
     const len = Math.sqrt(cx * cx + cy * cy + cz * cz)
-    if (len === 0) continue
+    if (len < 1e-10) continue
     const theta = Math.atan2(cz, cx)
     const phi = Math.asin(cy / len)
 
@@ -143,5 +156,5 @@ export function createEarth(scene: THREE.Scene, outlineObjects: THREE.Object3D[]
   atmosphere.position.set(0, EARTH_Y, 0)
   scene.add(atmosphere)
 
-  return earth
+  return { earth, biomeSeeds }
 }

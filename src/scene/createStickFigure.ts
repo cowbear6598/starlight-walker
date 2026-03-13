@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { EARTH_RADIUS, EARTH_Y } from '@/constants/scene'
+import { getSharedToonGradientMap } from '@/scene/materials'
 
 // 角色幾何尺寸
 const HEAD_RADIUS = 0.18
@@ -52,15 +53,6 @@ export interface StickFigureRefs {
   lanternGroup: THREE.Group
   lanternLight: THREE.PointLight
   lanternOrb: THREE.Mesh
-}
-
-function createToonGradientMap(): THREE.DataTexture {
-  const data = new Uint8Array([80, 160, 255])
-  const texture = new THREE.DataTexture(data, 3, 1, THREE.RedFormat)
-  texture.minFilter = THREE.NearestFilter
-  texture.magFilter = THREE.NearestFilter
-  texture.needsUpdate = true
-  return texture
 }
 
 interface LanternRefs {
@@ -288,7 +280,7 @@ function createCape(toonGradientMap: THREE.DataTexture): CapeRefs {
 }
 
 export function createStickFigure(scene: THREE.Scene, outlineObjects: THREE.Object3D[]): StickFigureRefs {
-  const toonGradientMap = createToonGradientMap()
+  const toonGradientMap = getSharedToonGradientMap()
   const { lanternGroup, lanternLight, lanternOrb } = createLantern(toonGradientMap)
 
   function createToonMaterial(color: string): THREE.MeshToonMaterial {

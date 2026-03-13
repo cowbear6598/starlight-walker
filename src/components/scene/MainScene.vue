@@ -11,6 +11,7 @@ import { SketchPostShader } from '@/shaders/SketchPostShader'
 import { PaperTextureShader } from '@/shaders/PaperTextureShader'
 import { BackgroundShader } from '@/shaders/BackgroundShader'
 import { createEarth } from '@/scene/createEarth'
+import { placeBiomeObjects } from '@/scene/biomeObjects/placeBiomeObjects'
 import { createMoon } from '@/scene/createMoon'
 import { createStars } from '@/scene/createStars'
 import { createStickFigure } from '@/scene/createStickFigure'
@@ -87,10 +88,12 @@ onMounted(() => {
   bgMesh.frustumCulled = false
   scene.add(bgMesh)
 
-  const earth = createEarth(scene, outlineObjects)
+  const { earth, biomeSeeds } = createEarth(scene, outlineObjects)
   const starParticles = createStars(scene, outlineObjects)
   const moonMesh = createMoon(scene)
   const stickFigure = createStickFigure(scene, outlineObjects)
+
+  const fishMeshes = placeBiomeObjects(earth, biomeSeeds, outlineObjects)
 
   useSceneAnimation({
     containerRef,
@@ -105,6 +108,7 @@ onMounted(() => {
     sketchPass,
     paperPass,
     bgShaderMaterial: bgMaterial,
+    fishMeshes,
   })
 })
 </script>
