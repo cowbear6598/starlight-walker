@@ -23,6 +23,8 @@ export interface SceneRefs {
   bgShaderMaterial: THREE.ShaderMaterial
 }
 
+const MAX_ALIVE_STARS = 15
+
 const CAPE_Z_WAVES = [
   { timeFreq: 2.3, spaceFreq: 4.0, seedMul: 1.0, amplitude: 0.12 },
   { timeFreq: 3.7, spaceFreq: 6.5, seedMul: 1.3, amplitude: 0.07 },
@@ -96,7 +98,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
 
     // 死亡粒子有機率重生
     for (const particle of refs.starParticles) {
-      if (particle.life <= 0 && aliveCount < 15 && Math.random() < 0.05) {
+      if (particle.life <= 0 && aliveCount < MAX_ALIVE_STARS && Math.random() < 0.05) {
         spawnStar(particle, refs.starParticles)
         aliveCount++
       }
@@ -119,14 +121,12 @@ export function useSceneAnimation(refs: SceneRefs): void {
     const leftHip = Math.sin(walkTime)
     const rightHip = Math.sin(walkTime + Math.PI)
 
-    leftThighPivot.rotation.x = leftHip * 0.2
-    rightThighPivot.rotation.x = rightHip * 0.2
+    leftThighPivot.rotation.x = leftHip * 0.25
+    rightThighPivot.rotation.x = rightHip * 0.25
 
     // 膝蓋：只在腿往前擺時微彎（清除地面）
-    // 用 clamp 確保只有正向擺動時才彎
-    // 幅度很小，只是微微彎曲
-    leftShinPivot.rotation.x = -Math.max(0, leftHip) * 0.2
-    rightShinPivot.rotation.x = -Math.max(0, rightHip) * 0.2
+    leftShinPivot.rotation.x = -Math.max(0, leftHip) * 0.22
+    rightShinPivot.rotation.x = -Math.max(0, rightHip) * 0.22
 
     // 左臂（拿燈籠 - 固定姿勢）
     leftUpperArmPivot.rotation.x = 0.2
@@ -159,7 +159,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
   function animateStickFigure(currentTimeSeconds: number): void {
     const { stickFigure, body, head } = refs.stickFigure
 
-    const walkTime = currentTimeSeconds * 2.0
+    const walkTime = currentTimeSeconds * 2.8
 
     animateLimbs(walkTime)
 
@@ -173,7 +173,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
 
     // 上下微彈（每步一次彈跳，幅度很小）
     const verticalBob = (1 - Math.cos(walkTime * 2)) * 0.008
-    stickFigure.position.y = EARTH_Y + EARTH_RADIUS + 0.1 + verticalBob
+    stickFigure.position.y = EARTH_Y + EARTH_RADIUS + 0.125 + verticalBob
 
     animateLantern(walkTime, currentTimeSeconds)
   }
@@ -186,9 +186,9 @@ export function useSceneAnimation(refs: SceneRefs): void {
     const t = currentTimeSeconds
 
     for (let i = 0; i < posAttr.count; i++) {
-      const originalX = original[i * 3] ?? 0
-      const originalY = original[i * 3 + 1] ?? 0
-      const originalZ = original[i * 3 + 2] ?? 0
+      const originalX = original[i * 3]!
+      const originalY = original[i * 3 + 1]!
+      const originalZ = original[i * 3 + 2]!
       const distFromTop = -originalY
       const seed = seeds[i]!
 
@@ -216,6 +216,10 @@ export function useSceneAnimation(refs: SceneRefs): void {
 
   function animate(timestamp: number = 0): void {
     animationId = requestAnimationFrame(animate)
+    if (lastTimestamp === 0) {
+      lastTimestamp = timestamp
+      return
+    }
     const deltaTimeSeconds = Math.min((timestamp - lastTimestamp) / 1000, 0.1)
     lastTimestamp = timestamp
     const currentTimeSeconds = timestamp * 0.001
@@ -244,6 +248,8 @@ export function useSceneAnimation(refs: SceneRefs): void {
   }
 
   function disposeSceneResources(): void {
+    const disposedTextures = new Set<THREE.Texture>()
+
     refs.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return
       object.geometry?.dispose()
@@ -251,9 +257,9 @@ export function useSceneAnimation(refs: SceneRefs): void {
       const materials = Array.isArray(object.material) ? object.material : [object.material]
       for (const mat of materials) {
         if (mat instanceof THREE.Material) {
-          // Dispose 所有 texture 屬性
           for (const value of Object.values(mat)) {
-            if (value instanceof THREE.Texture) {
+            if (value instanceof THREE.Texture && !disposedTextures.has(value)) {
+              disposedTextures.add(value)
               value.dispose()
             }
           }

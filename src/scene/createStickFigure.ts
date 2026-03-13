@@ -153,34 +153,38 @@ function addHatDecoration(hat: THREE.Mesh): void {
   hat.add(glowRing)
 }
 
-export function createStickFigure(
-  scene: THREE.Scene,
-  outlineObjects: THREE.Object3D[],
-): StickFigureRefs {
-  const toonGradientMap = createToonGradientMap()
-  const { lanternGroup, lanternLight, lanternOrb } = createLantern(toonGradientMap)
-
-  function createToonMaterial(color: string): THREE.MeshToonMaterial {
-    return new THREE.MeshToonMaterial({ color, gradientMap: toonGradientMap })
-  }
-
-  const stickFigure = new THREE.Group()
-
-  const darkGrayMat = createToonMaterial('#4a4a4a')
-  const lightGrayMat = createToonMaterial('#6a6a6a')
-  const headMat = createToonMaterial('#7a7a7a')
-
+function createHeadAndHat(headMat: THREE.MeshToonMaterial, toonGradientMap: THREE.DataTexture): THREE.Mesh {
   const headGeo = new THREE.IcosahedronGeometry(HEAD_RADIUS, 1)
   const head = new THREE.Mesh(headGeo, headMat)
   head.position.y = HEAD_Y
-  stickFigure.add(head)
 
-  const bodyGeo = new THREE.BoxGeometry(...BODY_SIZE)
-  const body = new THREE.Mesh(bodyGeo, darkGrayMat)
-  body.position.y = BODY_Y
-  stickFigure.add(body)
+  const hatMat = new THREE.MeshToonMaterial({ color: HAT_COLOR, gradientMap: toonGradientMap })
+  const hatGeo = new THREE.ConeGeometry(HAT_RADIUS, HAT_HEIGHT, 16)
+  const hat = new THREE.Mesh(hatGeo, hatMat)
+  hat.position.y = HAT_Y
+  head.add(hat)
 
-  // Left arm: upper arm + forearm with pivot groups
+  addHatDecoration(hat)
+
+  return head
+}
+
+interface LimbsRefs {
+  leftUpperArmPivot: THREE.Group
+  leftForearmPivot: THREE.Group
+  rightUpperArmPivot: THREE.Group
+  rightForearmPivot: THREE.Group
+  leftThighPivot: THREE.Group
+  leftShinPivot: THREE.Group
+  rightThighPivot: THREE.Group
+  rightShinPivot: THREE.Group
+}
+
+function createLimbs(
+  darkGrayMat: THREE.MeshToonMaterial,
+  lightGrayMat: THREE.MeshToonMaterial,
+  lanternGroup: THREE.Group,
+): LimbsRefs {
   const { pivot: leftUpperArmPivot } = createLimbPivot(
     [-ARM_OFFSET_X, ARM_PIVOT_Y, 0],
     UPPER_ARM_SIZE,
@@ -191,9 +195,7 @@ export function createStickFigure(
   lanternGroup.position.set(0, -0.16, 0)
   leftForearmPivot.add(lanternGroup)
   leftUpperArmPivot.add(leftForearmPivot)
-  stickFigure.add(leftUpperArmPivot)
 
-  // Right arm: upper arm + forearm with pivot groups
   const { pivot: rightUpperArmPivot } = createLimbPivot(
     [ARM_OFFSET_X, ARM_PIVOT_Y, 0],
     UPPER_ARM_SIZE,
@@ -202,9 +204,7 @@ export function createStickFigure(
   )
   const { pivot: rightForearmPivot } = createLimbPivot([0, -0.18, 0], FOREARM_SIZE, -0.08, lightGrayMat)
   rightUpperArmPivot.add(rightForearmPivot)
-  stickFigure.add(rightUpperArmPivot)
 
-  // Left leg: thigh + shin with pivot groups
   const { pivot: leftThighPivot } = createLimbPivot(
     [-LEG_OFFSET_X, LEG_PIVOT_Y, 0],
     THIGH_SIZE,
@@ -213,9 +213,7 @@ export function createStickFigure(
   )
   const { pivot: leftShinPivot } = createLimbPivot([0, -0.2, 0], SHIN_SIZE, -0.09, darkGrayMat)
   leftThighPivot.add(leftShinPivot)
-  stickFigure.add(leftThighPivot)
 
-  // Right leg: thigh + shin with pivot groups
   const { pivot: rightThighPivot } = createLimbPivot(
     [LEG_OFFSET_X, LEG_PIVOT_Y, 0],
     THIGH_SIZE,
@@ -224,8 +222,26 @@ export function createStickFigure(
   )
   const { pivot: rightShinPivot } = createLimbPivot([0, -0.2, 0], SHIN_SIZE, -0.09, darkGrayMat)
   rightThighPivot.add(rightShinPivot)
-  stickFigure.add(rightThighPivot)
 
+  return {
+    leftUpperArmPivot,
+    leftForearmPivot,
+    rightUpperArmPivot,
+    rightForearmPivot,
+    leftThighPivot,
+    leftShinPivot,
+    rightThighPivot,
+    rightShinPivot,
+  }
+}
+
+interface CapeRefs {
+  capeMesh: THREE.Mesh
+  originalCapePositions: Float32Array
+  capeVertexSeeds: Float32Array
+}
+
+function createCape(toonGradientMap: THREE.DataTexture): CapeRefs {
   const capeGeo = new THREE.PlaneGeometry(CAPE_WIDTH, CAPE_HEIGHT, CAPE_SEGMENTS_X, CAPE_SEGMENTS_Y)
   capeGeo.translate(0, -0.25, 0)
 
@@ -254,13 +270,12 @@ export function createStickFigure(
 
   capeGeo.setAttribute('color', new THREE.BufferAttribute(colorArray, 3))
 
-  const cape = new THREE.Mesh(capeGeo, capeMat)
-  cape.position.set(0, 0.74, 0.05)
-  cape.rotation.x = -0.25
-  cape.name = 'cape'
-  stickFigure.add(cape)
+  const capeMesh = new THREE.Mesh(capeGeo, capeMat)
+  capeMesh.position.set(0, 0.74, 0.05)
+  capeMesh.rotation.x = -0.25
+  capeMesh.name = 'cape'
 
-  const capePositions = cape.geometry.getAttribute('position')
+  const capePositions = capeMesh.geometry.getAttribute('position')
   const originalCapePositions = new Float32Array(capePositions.array)
 
   // 預計算每個頂點的 seed，避免每幀重算
@@ -269,13 +284,38 @@ export function createStickFigure(
     capeVertexSeeds[i] = (originalCapePositions[i * 3] ?? 0) * 17.3 + (originalCapePositions[i * 3 + 1] ?? 0) * 13.7
   }
 
-  const hatMat = createToonMaterial(HAT_COLOR)
-  const hatGeo = new THREE.ConeGeometry(HAT_RADIUS, HAT_HEIGHT, 16)
-  const hat = new THREE.Mesh(hatGeo, hatMat)
-  hat.position.y = HAT_Y
-  head.add(hat)
+  return { capeMesh, originalCapePositions, capeVertexSeeds }
+}
 
-  addHatDecoration(hat)
+export function createStickFigure(scene: THREE.Scene, outlineObjects: THREE.Object3D[]): StickFigureRefs {
+  const toonGradientMap = createToonGradientMap()
+  const { lanternGroup, lanternLight, lanternOrb } = createLantern(toonGradientMap)
+
+  function createToonMaterial(color: string): THREE.MeshToonMaterial {
+    return new THREE.MeshToonMaterial({ color, gradientMap: toonGradientMap })
+  }
+
+  const stickFigure = new THREE.Group()
+  const darkGrayMat = createToonMaterial('#4a4a4a')
+  const lightGrayMat = createToonMaterial('#6a6a6a')
+  const headMat = createToonMaterial('#7a7a7a')
+
+  const head = createHeadAndHat(headMat, toonGradientMap)
+  stickFigure.add(head)
+
+  const bodyGeo = new THREE.BoxGeometry(...BODY_SIZE)
+  const body = new THREE.Mesh(bodyGeo, darkGrayMat)
+  body.position.y = BODY_Y
+  stickFigure.add(body)
+
+  const limbs = createLimbs(darkGrayMat, lightGrayMat, lanternGroup)
+  stickFigure.add(limbs.leftUpperArmPivot)
+  stickFigure.add(limbs.rightUpperArmPivot)
+  stickFigure.add(limbs.leftThighPivot)
+  stickFigure.add(limbs.rightThighPivot)
+
+  const { capeMesh, originalCapePositions, capeVertexSeeds } = createCape(toonGradientMap)
+  stickFigure.add(capeMesh)
 
   stickFigure.rotation.y = Math.PI / 2
   stickFigure.position.set(0, EARTH_Y + EARTH_RADIUS, 0)
@@ -283,22 +323,9 @@ export function createStickFigure(
   outlineObjects.push(stickFigure)
 
   return {
-    stickFigure,
-    body,
-    head,
-    leftThighPivot,
-    leftShinPivot,
-    rightThighPivot,
-    rightShinPivot,
-    leftUpperArmPivot,
-    leftForearmPivot,
-    rightUpperArmPivot,
-    rightForearmPivot,
-    capeMesh: cape,
-    originalCapePositions,
-    capeVertexSeeds,
-    lanternGroup,
-    lanternLight,
-    lanternOrb,
+    stickFigure, body, head,
+    ...limbs,
+    capeMesh, originalCapePositions, capeVertexSeeds,
+    lanternGroup, lanternLight, lanternOrb,
   }
 }
