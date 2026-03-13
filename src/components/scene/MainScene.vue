@@ -11,7 +11,7 @@ import { SketchPostShader } from '@/shaders/SketchPostShader'
 import { PaperTextureShader } from '@/shaders/PaperTextureShader'
 import { BackgroundShader } from '@/shaders/BackgroundShader'
 import { createEarth } from '@/scene/createEarth'
-import { placeBiomeObjects } from '@/scene/biomeObjects/placeBiomeObjects'
+import { DynamicBiomeManager } from '@/scene/biomeObjects/dynamicBiomeManager'
 import { createMoon } from '@/scene/createMoon'
 import { createStars } from '@/scene/createStars'
 import { createStickFigure } from '@/scene/createStickFigure'
@@ -93,7 +93,7 @@ onMounted(() => {
   const moonMesh = createMoon(scene)
   const stickFigure = createStickFigure(scene, outlineObjects)
 
-  const fishMeshes = placeBiomeObjects(earth, biomeSeeds, outlineObjects)
+  const biomeManager = new DynamicBiomeManager(earth, biomeSeeds, outlineObjects, outlinePass)
 
   useSceneAnimation({
     containerRef,
@@ -108,7 +108,7 @@ onMounted(() => {
     sketchPass,
     paperPass,
     bgShaderMaterial: bgMaterial,
-    fishMeshes,
+    biomeManager,
   })
 })
 </script>

@@ -10,7 +10,6 @@ import {
 } from '@/scene/terrainColors'
 import { pickRandom } from '@/utils/random'
 
-export const POLAR_PHI_THRESHOLD = 1.0
 const WALK_PATH_THETA_WIDTH = 0.4
 
 const BIOME_COUNT = 60
@@ -28,6 +27,10 @@ export interface BiomeRegion {
   theta: number
   phi: number
 }
+
+const POLAR_SNOW_SEED_COUNT = 4
+const POLAR_PHI_INNER = 1.2
+const POLAR_PHI_OUTER = 1.5
 
 export function generateBiomeSeeds(): BiomeSeed[] {
   const seeds: BiomeSeed[] = []
@@ -57,6 +60,18 @@ export function generateBiomeSeeds(): BiomeSeed[] {
     seeds.push({ theta, phi, type })
   }
 
+  for (let i = 0; i < POLAR_SNOW_SEED_COUNT; i++) {
+    const theta = -Math.PI + (i / POLAR_SNOW_SEED_COUNT) * Math.PI * 2
+    const phi = POLAR_PHI_INNER + Math.random() * (POLAR_PHI_OUTER - POLAR_PHI_INNER)
+    seeds.push({ theta, phi, type: 'snow' })
+  }
+
+  for (let i = 0; i < POLAR_SNOW_SEED_COUNT; i++) {
+    const theta = -Math.PI + (i / POLAR_SNOW_SEED_COUNT) * Math.PI * 2
+    const phi = -(POLAR_PHI_INNER + Math.random() * (POLAR_PHI_OUTER - POLAR_PHI_INNER))
+    seeds.push({ theta, phi, type: 'snow' })
+  }
+
   return seeds
 }
 
@@ -82,8 +97,6 @@ const BIOME_COLOR_MAP: Record<BiomeType, THREE.Color[]> = {
 }
 
 export function classifyBiome(theta: number, phi: number, biomeSeeds: BiomeSeed[]): BiomeType {
-  if (phi > POLAR_PHI_THRESHOLD || phi < -POLAR_PHI_THRESHOLD) return 'snow'
-
   let minDist = Infinity
   let nearestType: BiomeType = 'ocean'
 
@@ -96,6 +109,35 @@ export function classifyBiome(theta: number, phi: number, biomeSeeds: BiomeSeed[
   }
 
   return nearestType
+}
+
+export function classifyBiomeWithSafety(
+  theta: number,
+  phi: number,
+  biomeSeeds: BiomeSeed[],
+  minMargin: number,
+): { type: BiomeType; safe: boolean } {
+  let nearestDist = Infinity
+  let nearestType: BiomeType = 'ocean'
+
+  for (const seed of biomeSeeds) {
+    const dist = sphericalDistance(theta, phi, seed.theta, seed.phi)
+    if (dist < nearestDist) {
+      nearestDist = dist
+      nearestType = seed.type
+    }
+  }
+
+  let nearestDiffDist = Infinity
+  for (const seed of biomeSeeds) {
+    if (seed.type === nearestType) continue
+    const dist = sphericalDistance(theta, phi, seed.theta, seed.phi)
+    if (dist < nearestDiffDist) {
+      nearestDiffDist = dist
+    }
+  }
+
+  return { type: nearestType, safe: (nearestDiffDist - nearestDist) > minMargin }
 }
 
 function classifyTerrain(theta: number, phi: number, biomeSeeds: BiomeSeed[]): THREE.Color {
@@ -138,6 +180,7 @@ export function createEarth(
 
   const material = new THREE.MeshBasicMaterial({
     vertexColors: true,
+    side: THREE.DoubleSide,
   })
 
   const earth = new THREE.Mesh(geometry, material)

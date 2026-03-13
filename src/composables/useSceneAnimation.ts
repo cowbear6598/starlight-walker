@@ -7,7 +7,7 @@ import { EARTH_RADIUS, EARTH_Y, SCENE_ASPECT } from '@/constants/scene'
 import { applyStarAppearance, spawnStar } from '@/scene/createStars'
 import type { StarParticle } from '@/scene/createStars'
 import type { StickFigureRefs } from '@/scene/createStickFigure'
-import { fishAnimationDataMap } from '@/scene/biomeObjects/placeBiomeObjects'
+import type { DynamicBiomeManager } from '@/scene/biomeObjects/dynamicBiomeManager'
 import { disposeSharedToonGradientMap } from '@/scene/materials'
 
 export interface SceneRefs {
@@ -23,7 +23,7 @@ export interface SceneRefs {
   sketchPass: ShaderPass
   paperPass: ShaderPass
   bgShaderMaterial: THREE.ShaderMaterial
-  fishMeshes: THREE.Mesh[]
+  biomeManager: DynamicBiomeManager
 }
 
 const MAX_ALIVE_STARS = 15
@@ -55,12 +55,6 @@ function calculateWave(
 export function useSceneAnimation(refs: SceneRefs): void {
   let animationId = 0
   let lastTimestamp = 0
-
-  const _fishNormalVec = new THREE.Vector3()
-  const _fishPosTmpVec = new THREE.Vector3()
-  const _fishUpVec = new THREE.Vector3(0, 1, 0)
-  const _fishBaseQuat = new THREE.Quaternion()
-  const _fishSwayQuat = new THREE.Quaternion()
 
   const timeUniformSources = [
     refs.bgShaderMaterial.uniforms['uTime'],
@@ -187,26 +181,6 @@ export function useSceneAnimation(refs: SceneRefs): void {
     animateLantern(walkTime, currentTimeSeconds)
   }
 
-  function animateFish(currentTimeSeconds: number): void {
-    for (const fish of refs.fishMeshes) {
-      const data = fishAnimationDataMap.get(fish)
-      if (!data) continue
-
-      const { seed, originalPosition } = data
-
-      _fishNormalVec.copy(originalPosition).normalize()
-      const bobAmount = Math.sin(currentTimeSeconds * 0.6 + seed * 10) * 0.06
-      _fishPosTmpVec.copy(_fishNormalVec).multiplyScalar(bobAmount)
-      fish.position.copy(originalPosition).add(_fishPosTmpVec)
-
-      const swayAngle = Math.sin(currentTimeSeconds * 0.8 + seed * 8) * 0.3
-
-      _fishBaseQuat.setFromUnitVectors(_fishUpVec, _fishNormalVec)
-      _fishSwayQuat.setFromAxisAngle(_fishNormalVec, swayAngle)
-      fish.quaternion.copy(_fishSwayQuat.multiply(_fishBaseQuat))
-    }
-  }
-
   function animateCape(currentTimeSeconds: number): void {
     const { capeMesh, originalCapePositions: original, capeVertexSeeds: seeds } = refs.stickFigure
     const capeGeo = capeMesh.geometry
@@ -254,7 +228,8 @@ export function useSceneAnimation(refs: SceneRefs): void {
     const currentTimeSeconds = timestamp * 0.001
 
     animateEarth()
-    animateFish(currentTimeSeconds)
+    refs.biomeManager.update(refs.earth.rotation.z)
+    refs.biomeManager.animateFish(currentTimeSeconds)
     animateMoon(currentTimeSeconds)
     animateStarParticles(deltaTimeSeconds)
     animateStickFigure(currentTimeSeconds)
@@ -278,6 +253,9 @@ export function useSceneAnimation(refs: SceneRefs): void {
   }
 
   function disposeSceneResources(): void {
+    refs.biomeManager.dispose()
+    disposeSharedToonGradientMap()
+
     const disposedTextures = new Set<THREE.Texture>()
 
     refs.scene.traverse((object) => {
@@ -297,8 +275,6 @@ export function useSceneAnimation(refs: SceneRefs): void {
         }
       }
     })
-
-    disposeSharedToonGradientMap()
   }
 
   animationId = requestAnimationFrame(animate)
