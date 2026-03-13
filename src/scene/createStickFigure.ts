@@ -24,11 +24,15 @@ const HAT_RADIUS = 0.3
 const HAT_HEIGHT = 0.28
 const HAT_Y = 0.19
 
+const HAT_COLOR = '#2a2a4a'
+
 // 披風
-const CAPE_WIDTH = 0.45
-const CAPE_HEIGHT = 0.5
 const CAPE_SEGMENTS_X = 12
 const CAPE_SEGMENTS_Y = 24
+const CAPE_WIDTH = 0.45
+const CAPE_HEIGHT = 0.5
+const CAPE_COLOR = '#0f1a30'
+const CAPE_FADE_COLOR = '#3a5a88'
 
 export interface StickFigureRefs {
   stickFigure: THREE.Group
@@ -117,9 +121,9 @@ function createLimbPivot(
 }
 
 function addHatDecoration(hat: THREE.Mesh): void {
-  const dotMat = new THREE.MeshBasicMaterial({ color: '#aabbdd' })
   const dotCount = 6 + Math.floor(Math.random() * 3)
   for (let i = 0; i < dotCount; i++) {
+    const dotMat = new THREE.MeshBasicMaterial({ color: '#aabbdd' })
     const radius = 0.006 + Math.random() * 0.006
     const dotGeo = new THREE.SphereGeometry(radius, 4, 4)
     const dot = new THREE.Mesh(dotGeo, dotMat)
@@ -137,16 +141,16 @@ function addHatDecoration(hat: THREE.Mesh): void {
     hat.add(dot)
   }
 
-  const brimGeo = new THREE.RingGeometry(0.28, 0.32, 32)
-  const brimMat = new THREE.MeshBasicMaterial({
-    color: '#667799',
+  const glowRingGeo = new THREE.TorusGeometry(0.30, 0.008, 8, 32)
+  const glowRingMat = new THREE.MeshBasicMaterial({
+    color: '#7799bb',
     transparent: true,
-    opacity: 0.15,
-    side: THREE.DoubleSide,
+    opacity: 0.5,
   })
-  const brim = new THREE.Mesh(brimGeo, brimMat)
-  brim.position.y = -0.14
-  hat.add(brim)
+  const glowRing = new THREE.Mesh(glowRingGeo, glowRingMat)
+  glowRing.position.y = -0.14
+  glowRing.rotation.x = Math.PI / 2
+  hat.add(glowRing)
 }
 
 export function createStickFigure(
@@ -224,8 +228,32 @@ export function createStickFigure(
 
   const capeGeo = new THREE.PlaneGeometry(CAPE_WIDTH, CAPE_HEIGHT, CAPE_SEGMENTS_X, CAPE_SEGMENTS_Y)
   capeGeo.translate(0, -0.25, 0)
-  const capeMat = createToonMaterial('#3a3a5a')
-  capeMat.side = THREE.DoubleSide
+
+  const capeMat = new THREE.MeshToonMaterial({
+    color: '#ffffff',
+    gradientMap: toonGradientMap,
+    side: THREE.DoubleSide,
+    vertexColors: true,
+  })
+
+  // 建立底部漸淡的 vertex colors：頂部使用原色，底部漸變到較亮的顏色
+  const posAttr = capeGeo.getAttribute('position')
+  const colorArray = new Float32Array(posAttr.count * 3)
+  const baseColor = new THREE.Color(CAPE_COLOR)
+  const fadeColor = new THREE.Color(CAPE_FADE_COLOR)
+
+  for (let i = 0; i < posAttr.count; i++) {
+    const y = posAttr.getY(i)
+    const t = Math.max(0, Math.min(1, -y / CAPE_HEIGHT))
+    const color = baseColor.clone().lerp(fadeColor, t)
+
+    colorArray[i * 3] = color.r
+    colorArray[i * 3 + 1] = color.g
+    colorArray[i * 3 + 2] = color.b
+  }
+
+  capeGeo.setAttribute('color', new THREE.BufferAttribute(colorArray, 3))
+
   const cape = new THREE.Mesh(capeGeo, capeMat)
   cape.position.set(0, 0.74, 0.05)
   cape.rotation.x = -0.25
@@ -241,7 +269,7 @@ export function createStickFigure(
     capeVertexSeeds[i] = (originalCapePositions[i * 3] ?? 0) * 17.3 + (originalCapePositions[i * 3 + 1] ?? 0) * 13.7
   }
 
-  const hatMat = createToonMaterial('#2a2a4a')
+  const hatMat = createToonMaterial(HAT_COLOR)
   const hatGeo = new THREE.ConeGeometry(HAT_RADIUS, HAT_HEIGHT, 16)
   const hat = new THREE.Mesh(hatGeo, hatMat)
   hat.position.y = HAT_Y

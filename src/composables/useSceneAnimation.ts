@@ -34,15 +34,6 @@ const CAPE_X_WAVES = [
   { timeFreq: 4.3, spaceFreq: 5.1, seedMul: 1.1, amplitude: 0.02 },
 ] as const
 
-function easeInOutSine(t: number): number {
-  return -(Math.cos(Math.PI * t) - 1) / 2
-}
-
-function smoothWalk(time: number): number {
-  const raw = Math.sin(time)
-  return Math.sign(raw) * Math.pow(Math.abs(raw), 0.6)
-}
-
 function calculateWave(
   waves: readonly { timeFreq: number; spaceFreq: number; seedMul: number; amplitude: number }[],
   t: number,
@@ -67,7 +58,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
   ].filter((u): u is { value: number } => u !== undefined)
 
   function animateEarth(): void {
-    refs.earth.rotation.z -= 0.0008
+    refs.earth.rotation.z -= 0.0003
   }
 
   function animateMoon(currentTimeSeconds: number): void {
@@ -112,7 +103,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
     }
   }
 
-  function animateLimbs(walkTime: number, walkCycle: number, walkCycleOpposite: number): void {
+  function animateLimbs(walkTime: number): void {
     const {
       leftThighPivot,
       leftShinPivot,
@@ -124,18 +115,27 @@ export function useSceneAnimation(refs: SceneRefs): void {
       rightForearmPivot,
     } = refs.stickFigure
 
-    leftThighPivot.rotation.x = walkCycle * 0.25
-    rightThighPivot.rotation.x = walkCycleOpposite * 0.25
+    // 大腿：簡單的 sin 擺動，左右腿相位差 PI
+    const leftHip = Math.sin(walkTime)
+    const rightHip = Math.sin(walkTime + Math.PI)
 
-    leftShinPivot.rotation.x = -Math.max(0, walkCycle) * 0.45 - 0.05
-    rightShinPivot.rotation.x = -Math.max(0, walkCycleOpposite) * 0.45 - 0.05
+    leftThighPivot.rotation.x = leftHip * 0.2
+    rightThighPivot.rotation.x = rightHip * 0.2
 
+    // 膝蓋：只在腿往前擺時微彎（清除地面）
+    // 用 clamp 確保只有正向擺動時才彎
+    // 幅度很小，只是微微彎曲
+    leftShinPivot.rotation.x = -Math.max(0, leftHip) * 0.2
+    rightShinPivot.rotation.x = -Math.max(0, rightHip) * 0.2
+
+    // 左臂（拿燈籠 - 固定姿勢）
     leftUpperArmPivot.rotation.x = 0.2
     leftUpperArmPivot.rotation.z = 0.15
     leftForearmPivot.rotation.x = 1.3
 
-    rightUpperArmPivot.rotation.x = smoothWalk(walkTime + 0.3) * 0.15
-    rightForearmPivot.rotation.x = -0.1 - (Math.sin(walkTime + 0.3) * 0.5 + 0.5) * 0.15
+    // 右臂（跟左腿對側擺動）
+    rightUpperArmPivot.rotation.x = leftHip * 0.15
+    rightForearmPivot.rotation.x = -0.1 - Math.max(0, -leftHip) * 0.15
   }
 
   function animateLantern(walkTime: number, currentTimeSeconds: number): void {
@@ -159,19 +159,21 @@ export function useSceneAnimation(refs: SceneRefs): void {
   function animateStickFigure(currentTimeSeconds: number): void {
     const { stickFigure, body, head } = refs.stickFigure
 
-    const walkTime = currentTimeSeconds * 1.2
-    const walkCycle = smoothWalk(walkTime)
-    const walkCycleOpposite = smoothWalk(walkTime + Math.PI)
+    const walkTime = currentTimeSeconds * 2.0
 
-    animateLimbs(walkTime, walkCycle, walkCycleOpposite)
+    animateLimbs(walkTime)
 
-    body.rotation.x = 0.03 + walkCycle * 0.015
-    body.rotation.z = smoothWalk(walkTime * 2) * 0.02
+    // 身體微微前傾（固定的走路姿態）+ 隨步伐微小晃動
+    body.rotation.x = 0.03 + Math.sin(walkTime * 2) * 0.01
+    body.rotation.z = Math.sin(walkTime) * 0.015
 
-    head.rotation.x = -0.05 + Math.sin(walkTime * 2) * 0.02
-    head.rotation.y = Math.sin(walkTime * 0.3) * 0.04
+    // 頭部輕微晃動
+    head.rotation.x = -0.03 + Math.sin(walkTime * 2) * 0.01
+    head.rotation.y = Math.sin(walkTime * 0.5) * 0.02
 
-    stickFigure.position.y = EARTH_Y + EARTH_RADIUS + (1 - Math.cos(walkTime * 2)) * 0.015
+    // 上下微彈（每步一次彈跳，幅度很小）
+    const verticalBob = (1 - Math.cos(walkTime * 2)) * 0.008
+    stickFigure.position.y = EARTH_Y + EARTH_RADIUS + 0.1 + verticalBob
 
     animateLantern(walkTime, currentTimeSeconds)
   }
