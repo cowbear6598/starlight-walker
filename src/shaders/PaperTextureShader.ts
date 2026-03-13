@@ -18,7 +18,7 @@ export const PaperTextureShader = {
       float grain = hash(vUv * 500.0 + vec2(uTime * 0.01));
       float coarse = hash(vUv * 50.0);
       float paperNoise = grain * 0.6 + coarse * 0.4;
-      vec3 result = mix(color.rgb, vec3(paperNoise), 0.025);
+      vec3 result = mix(color.rgb, vec3(paperNoise), 0.018);
       gl_FragColor = vec4(result, color.a);
     }
   `,
