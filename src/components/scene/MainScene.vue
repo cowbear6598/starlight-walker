@@ -16,7 +16,7 @@ import { createMoon } from '@/scene/createMoon'
 import { createStars } from '@/scene/createStars'
 import { createStickFigure } from '@/scene/createStickFigure'
 import { getSharedToonGradientMap } from '@/scene/materials'
-import { NPC_LIST, NPC_THETA } from '@/scene/npc/npcConfig'
+import { NPC_LIST, NPC_THETA, generateNonOverlappingPhi } from '@/scene/npc/npcConfig'
 import { preloadAvatarTextures, createNpc } from '@/scene/npc/createNpc'
 import { NpcManager } from '@/scene/npc/npcManager'
 import type { NpcVisibilityState } from '@/scene/npc/npcManager'
@@ -126,9 +126,10 @@ onMounted(() => {
 
   preloadAvatarTextures(NPC_LIST).then((textureMap) => {
     const initialPhis: number[] = []
+
     const npcRefsList = NPC_LIST.map((npcData) => {
       const texture = textureMap.get(npcData.id)!
-      const phi = Math.random() * Math.PI * 2 - Math.PI
+      const phi = generateNonOverlappingPhi(initialPhis)
       initialPhis.push(phi)
       return createNpc(npcData, texture, earth, toonGradientMap, outlineObjects, NPC_THETA, phi)
     })

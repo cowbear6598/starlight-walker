@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { Ref } from 'vue'
 import { repositionNpc } from '@/scene/npc/createNpc'
 import type { NpcRefs } from '@/scene/npc/createNpc'
-import { NPC_THETA } from '@/scene/npc/npcConfig'
+import { NPC_THETA, generateNonOverlappingPhi } from '@/scene/npc/npcConfig'
 import type { NpcData } from '@/scene/npc/npcConfig'
 import { EARTH_Y } from '@/constants/scene'
 
@@ -16,12 +16,11 @@ export interface NpcVisibilityState {
 }
 
 const VISIBLE_DOT_THRESHOLD = Math.cos(Math.PI / 3)
-const WAVE_DOT_THRESHOLD = Math.cos(Math.PI / 6)
 const NAME_DOT_THRESHOLD = Math.cos(Math.PI / 10)
 
 const SPAWN_PROBABILITY = 0.7
-const MIN_PHI_SEPARATION = Math.PI / 2.5
-const MAX_PHI_GENERATION_ATTEMPTS = 20
+const WAVE_BLEND_SPEED = 0.08
+const NAME_LERP_FACTOR = 0.15
 
 export class NpcManager {
   private npcRefsList: NpcRefs[]
@@ -42,6 +41,8 @@ export class NpcManager {
   private _smoothScreenX: number[] = []
   private _smoothScreenY: number[] = []
   private _smoothRotation: number[] = []
+  private _smoothInitialized: boolean[] = []
+  private _waveBlend: number[] = []
 
   constructor(
     npcRefsList: NpcRefs[],
@@ -60,6 +61,8 @@ export class NpcManager {
     this._smoothScreenX = new Array(npcRefsList.length).fill(0)
     this._smoothScreenY = new Array(npcRefsList.length).fill(0)
     this._smoothRotation = new Array(npcRefsList.length).fill(0)
+    this._smoothInitialized = new Array(npcRefsList.length).fill(false)
+    this._waveBlend = new Array(npcRefsList.length).fill(0)
   }
 
   update(earthRotationZ: number, currentTimeSeconds: number): void {
@@ -84,11 +87,13 @@ export class NpcManager {
 
       if (!inRange) {
         if (this._spawnDecided[i]) {
-          const randomPhi = this.generateNonOverlappingPhi(i)
+          const randomPhi = generateNonOverlappingPhi(this._currentPhis, i)
           this._currentPhis[i] = randomPhi
           repositionNpc(npcRefs, NPC_THETA, randomPhi)
           this._spawnDecided[i] = false
           this._shouldSpawn[i] = false
+          this._smoothInitialized[i] = false
+          this._waveBlend[i] = 0
         }
         npcRefs.group.visible = false
         this.resetWaveAnimation(npcRefs)
@@ -126,14 +131,19 @@ export class NpcManager {
 
       this.animateFlag(npcRefs, currentTimeSeconds, i)
 
-      const isWaving = dot >= WAVE_DOT_THRESHOLD
-      if (isWaving) {
-        this.animateWave(npcRefs, currentTimeSeconds, i)
+      let showName = dot >= NAME_DOT_THRESHOLD
+
+      if (showName) {
+        this._waveBlend[i] = Math.min(1, (this._waveBlend[i] ?? 0) + WAVE_BLEND_SPEED)
+      } else {
+        this._waveBlend[i] = Math.max(0, (this._waveBlend[i] ?? 0) - WAVE_BLEND_SPEED)
+      }
+
+      if (this._waveBlend[i]! > 0.001) {
+        this.animateWaveBlended(npcRefs, currentTimeSeconds, i, this._waveBlend[i]!)
       } else {
         this.resetWaveAnimation(npcRefs)
       }
-
-      let showName = dot >= NAME_DOT_THRESHOLD
       let screenX = 0
       let screenY = 0
       let rotation = 0
@@ -141,11 +151,16 @@ export class NpcManager {
       if (showName) {
         const coords = this.calculateScreenPosition(npcRefs, earthRotationZ, this._currentPhis[i]!)
         if (coords) {
-          // lerp 平滑過渡，避免抖動
-          const lerpFactor = 0.15
-          this._smoothScreenX[i] = this._smoothScreenX[i]! + (coords.screenX - this._smoothScreenX[i]!) * lerpFactor
-          this._smoothScreenY[i] = this._smoothScreenY[i]! + (coords.screenY - this._smoothScreenY[i]!) * lerpFactor
-          this._smoothRotation[i] = this._smoothRotation[i]! + (coords.rotation - this._smoothRotation[i]!) * lerpFactor
+          if (!this._smoothInitialized[i]) {
+            this._smoothScreenX[i] = coords.screenX
+            this._smoothScreenY[i] = coords.screenY
+            this._smoothRotation[i] = coords.rotation
+            this._smoothInitialized[i] = true
+          } else {
+            this._smoothScreenX[i] = this._smoothScreenX[i]! + (coords.screenX - this._smoothScreenX[i]!) * NAME_LERP_FACTOR
+            this._smoothScreenY[i] = this._smoothScreenY[i]! + (coords.screenY - this._smoothScreenY[i]!) * NAME_LERP_FACTOR
+            this._smoothRotation[i] = this._smoothRotation[i]! + (coords.rotation - this._smoothRotation[i]!) * NAME_LERP_FACTOR
+          }
           screenX = this._smoothScreenX[i]!
           screenY = this._smoothScreenY[i]!
           rotation = this._smoothRotation[i]!
@@ -167,26 +182,14 @@ export class NpcManager {
     this.visibilityStates.value = newStates
   }
 
-  private generateNonOverlappingPhi(excludeIndex: number): number {
-    for (let attempt = 0; attempt < MAX_PHI_GENERATION_ATTEMPTS; attempt++) {
-      const candidate = Math.random() * Math.PI * 2 - Math.PI
-      const tooClose = this._currentPhis.some((phi, index) => {
-        if (index === excludeIndex) return false
-        const diff = Math.abs(candidate - phi)
-        const circularDiff = Math.min(diff, Math.PI * 2 - diff)
-        return circularDiff < MIN_PHI_SEPARATION
-      })
-      if (!tooClose) return candidate
-    }
-    return Math.random() * Math.PI * 2 - Math.PI
-  }
-
-  private animateWave(npcRefs: NpcRefs, currentTimeSeconds: number, index: number): void {
+  private animateWaveBlended(npcRefs: NpcRefs, currentTimeSeconds: number, index: number, blend: number): void {
     const phase = index * 0.5
+    const targetUpperZ = Math.sin(currentTimeSeconds * 5 + phase) * 0.3 + 2.0
+    const targetForearmX = Math.sin(currentTimeSeconds * 5 + Math.PI / 4 + phase) * 0.2 - 0.8
+
     npcRefs.rightUpperArmPivot.rotation.x = 0
-    npcRefs.rightUpperArmPivot.rotation.z = Math.sin(currentTimeSeconds * 5 + phase) * 0.3 + 2.0
-    npcRefs.rightForearmPivot.rotation.x =
-      Math.sin(currentTimeSeconds * 5 + Math.PI / 4 + phase) * 0.2 - 0.8
+    npcRefs.rightUpperArmPivot.rotation.z = targetUpperZ * blend
+    npcRefs.rightForearmPivot.rotation.x = targetForearmX * blend
   }
 
   private resetWaveAnimation(npcRefs: NpcRefs): void {
