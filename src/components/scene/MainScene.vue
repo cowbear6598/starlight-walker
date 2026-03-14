@@ -111,6 +111,7 @@ onMounted(() => {
     composer,
     earth,
     moonMesh,
+    moonLight,
     stickFigure,
     starParticles,
     sketchPass,

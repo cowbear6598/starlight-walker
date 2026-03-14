@@ -3,7 +3,7 @@ import type { Ref } from 'vue'
 import { onUnmounted } from 'vue'
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { EARTH_RADIUS, EARTH_Y, SCENE_ASPECT } from '@/constants/scene'
+import { CAMERA_HALF_FOV_TAN, CAMERA_Z, EARTH_RADIUS, EARTH_Y, MOON_X, MOON_Z, SCENE_ASPECT } from '@/constants/scene'
 import { applyStarAppearance, spawnStar } from '@/scene/createStars'
 import type { StarParticle } from '@/scene/createStars'
 import type { StickFigureRefs } from '@/scene/createStickFigure'
@@ -19,6 +19,7 @@ export interface SceneRefs {
   composer: EffectComposer
   earth: THREE.Mesh
   moonMesh: THREE.Mesh
+  moonLight: THREE.PointLight
   stickFigure: StickFigureRefs
   starParticles: StarParticle[]
   sketchPass: ShaderPass
@@ -29,6 +30,15 @@ export interface SceneRefs {
 }
 
 const MAX_ALIVE_STARS = 15
+
+const STAR_PARALLAX_FACTOR = 0.45
+const STAR_PARALLAX_DEPTH_BASE = 12
+const MOON_PARALLAX_FACTOR = 0.25
+
+const MOON_DEPTH = CAMERA_Z - MOON_Z
+const MOON_DEPTH_MULTIPLIER = STAR_PARALLAX_DEPTH_BASE / MOON_DEPTH
+const MOON_HALF_WIDTH = CAMERA_HALF_FOV_TAN * MOON_DEPTH * SCENE_ASPECT
+const MOON_RANGE_WIDTH = MOON_HALF_WIDTH * 2
 
 const CAPE_Z_WAVES = [
   { timeFreq: 2.3, spaceFreq: 4.0, seedMul: 1.0, amplitude: 0.12 },
@@ -68,7 +78,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
     refs.earth.rotation.z -= 0.0003
   }
 
-  function animateMoon(currentTimeSeconds: number): void {
+  function animateMoon(currentTimeSeconds: number, earthRotationZ: number): void {
     const material = refs.moonMesh.material
     if (!(material instanceof THREE.ShaderMaterial)) return
 
@@ -82,9 +92,16 @@ export function useSceneAnimation(refs: SceneRefs): void {
     if (material.uniforms['uTime']) {
       material.uniforms['uTime']!.value = currentTimeSeconds
     }
+
+    const rawOffsetX = -earthRotationZ * MOON_PARALLAX_FACTOR * MOON_DEPTH_MULTIPLIER
+    const rawX = MOON_X + rawOffsetX
+    // wrap-around：讓月亮從可見範圍一側飄出後，從另一側重新出現
+    const wrappedX = ((rawX + MOON_HALF_WIDTH) % MOON_RANGE_WIDTH + MOON_RANGE_WIDTH) % MOON_RANGE_WIDTH - MOON_HALF_WIDTH
+    refs.moonMesh.position.x = wrappedX
+    refs.moonLight.position.x = wrappedX
   }
 
-  function animateStarParticles(deltaTimeSeconds: number): void {
+  function animateStarParticles(deltaTimeSeconds: number, earthRotationZ: number): void {
     let aliveCount = 0
 
     for (const particle of refs.starParticles) {
@@ -96,7 +113,18 @@ export function useSceneAnimation(refs: SceneRefs): void {
           particle.mesh.visible = false
         } else {
           applyStarAppearance(particle)
-          aliveCount++
+
+          const depthMultiplier = STAR_PARALLAX_DEPTH_BASE / Math.max(CAMERA_Z - particle.mesh.position.z, 0.001)
+          const offsetX = -earthRotationZ * STAR_PARALLAX_FACTOR * depthMultiplier
+          particle.mesh.position.x = particle.originX + offsetX
+
+          const halfWidth = CAMERA_HALF_FOV_TAN * Math.max(CAMERA_Z - particle.mesh.position.z, 0.001) * SCENE_ASPECT
+          if (Math.abs(particle.mesh.position.x) > halfWidth * 1.3) {
+            particle.life = 0
+            particle.mesh.visible = false
+          } else {
+            aliveCount++
+          }
         }
       }
     }
@@ -233,8 +261,8 @@ export function useSceneAnimation(refs: SceneRefs): void {
     refs.biomeManager.update(refs.earth.rotation.z)
     refs.biomeManager.animateFish(currentTimeSeconds)
     refs.npcManager?.update(refs.earth.rotation.z, currentTimeSeconds)
-    animateMoon(currentTimeSeconds)
-    animateStarParticles(deltaTimeSeconds)
+    animateMoon(currentTimeSeconds, refs.earth.rotation.z)
+    animateStarParticles(deltaTimeSeconds, refs.earth.rotation.z)
     animateStickFigure(currentTimeSeconds)
     animateCape(currentTimeSeconds)
     updateShaderUniforms(currentTimeSeconds)

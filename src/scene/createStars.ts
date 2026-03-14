@@ -7,6 +7,7 @@ export interface StarParticle {
   life: number
   maxLife: number
   baseScale: number
+  originX: number
 }
 
 function createStarShape(points: number, outerR: number, innerR: number): THREE.Shape {
@@ -75,7 +76,7 @@ function buildStarGridDensity(
     if (particle.life <= 0 || particle === excludeParticle) continue
     const worldZ = particle.mesh.position.z
     const worldY = particle.mesh.position.y
-    const worldX = particle.mesh.position.x
+    const worldX = particle.originX
     const distanceFromCamera = CAMERA_Z - worldZ
     const halfHeight = CAMERA_HALF_FOV_TAN * distanceFromCamera
     const halfWidth = halfHeight * SCENE_ASPECT
@@ -152,6 +153,7 @@ export function spawnStar(particle: StarParticle, allParticles: StarParticle[]):
   const { x, y, z } = calculateWorldPositionFromCell(chosenCell, COLS, ROWS)
 
   particle.mesh.position.set(x, y, z)
+  particle.originX = x
   particle.mesh.rotation.set(0, 0, Math.random() * Math.PI * 2)
   particle.life = 1.0
   particle.maxLife = 15 + Math.random() * 15
@@ -195,6 +197,7 @@ export function createStars(scene: THREE.Scene, outlineObjects: THREE.Object3D[]
       life: 0,
       maxLife: 15 + Math.random() * 15,
       baseScale: 0.03 + Math.random() * 0.05,
+      originX: 0,
     })
   }
 
