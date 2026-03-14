@@ -24,6 +24,10 @@ export interface NpcRefs {
   bodyMeshes: THREE.Mesh[]
   rightUpperArmPivot: THREE.Group
   rightForearmPivot: THREE.Group
+  leftUpperArmPivot: THREE.Group
+  leftForearmPivot: THREE.Group
+  bodyMesh: THREE.Mesh
+  bodyGroup: THREE.Group
   flagFaceGroup: THREE.Group
   npcData: NpcData
 }
@@ -33,6 +37,9 @@ interface NpcBodyResult {
   bodyMeshes: THREE.Mesh[]
   rightUpperArmPivot: THREE.Group
   rightForearmPivot: THREE.Group
+  leftUpperArmPivot: THREE.Group
+  leftForearmPivot: THREE.Group
+  bodyMesh: THREE.Mesh
 }
 
 function createNpcBody(
@@ -137,7 +144,7 @@ function createNpcBody(
   bodyGroup.add(rightThighPivot)
   bodyMeshes.push(rightThighMesh, rightShinMesh)
 
-  return { bodyGroup, bodyMeshes, rightUpperArmPivot, rightForearmPivot }
+  return { bodyGroup, bodyMeshes, rightUpperArmPivot, rightForearmPivot, leftUpperArmPivot, leftForearmPivot, bodyMesh: body }
 }
 
 interface FlagResult {
@@ -216,7 +223,7 @@ export function createNpc(
   theta: number,
   phi: number,
 ): NpcRefs {
-  const { bodyGroup, bodyMeshes, rightUpperArmPivot, rightForearmPivot } = createNpcBody(
+  const { bodyGroup, bodyMeshes, rightUpperArmPivot, rightForearmPivot, leftUpperArmPivot, leftForearmPivot, bodyMesh } = createNpcBody(
     toonGradientMap,
     npcData.hatColor,
     npcData.scarfColor,
@@ -225,14 +232,18 @@ export function createNpc(
   const { flagGroup, flagFaceGroup } = createFlag(avatarTexture, toonGradientMap)
 
   const group = new THREE.Group()
+  bodyGroup.add(flagGroup)
   group.add(bodyGroup)
-  group.add(flagGroup)
 
   const npcRefs: NpcRefs = {
     group,
     bodyMeshes,
     rightUpperArmPivot,
     rightForearmPivot,
+    leftUpperArmPivot,
+    leftForearmPivot,
+    bodyMesh,
+    bodyGroup,
     flagFaceGroup,
     npcData,
   }

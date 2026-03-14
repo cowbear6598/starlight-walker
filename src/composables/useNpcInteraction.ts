@@ -39,7 +39,12 @@ export function useNpcInteraction(
     if (npcRefs) {
       npcManager.playClickFeedback(npcRefs)
     }
-    window.open(getThreadsUrl(npcData.threadsUsername), '_blank', 'noopener,noreferrer')
+    try {
+      const url = getThreadsUrl(npcData.threadsUsername)
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch {
+      // 靜默處理無效 username
+    }
   }
 
   domElement.addEventListener('pointermove', onPointerMove)

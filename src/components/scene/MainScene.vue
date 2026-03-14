@@ -7,7 +7,6 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { SCENE_ASPECT, MOON_X, MOON_Y, MOON_Z } from '@/constants/scene'
-import { SketchPostShader } from '@/shaders/SketchPostShader'
 import { PaperTextureShader } from '@/shaders/PaperTextureShader'
 import { BackgroundShader } from '@/shaders/BackgroundShader'
 import { createEarth } from '@/scene/createEarth'
@@ -16,6 +15,9 @@ import { createMoon } from '@/scene/createMoon'
 import { createStars } from '@/scene/createStars'
 import { createStickFigure } from '@/scene/createStickFigure'
 import { getSharedToonGradientMap } from '@/scene/materials'
+import { createCat } from '@/scene/cat/createCat'
+import { CAT_VARIANTS } from '@/scene/cat/catConfig'
+import type { CatRefs } from '@/scene/cat/createCat'
 import { NPC_LIST, NPC_THETA, generateNonOverlappingPhi } from '@/scene/npc/npcConfig'
 import { preloadAvatarTextures, createNpc } from '@/scene/npc/createNpc'
 import { NpcManager } from '@/scene/npc/npcManager'
@@ -57,14 +59,10 @@ onMounted(() => {
   outlinePass.selectedObjects = outlineObjects
   outlinePass.edgeStrength = 3.0
   outlinePass.edgeGlow = 0.0
-  outlinePass.edgeThickness = 1.0
+  outlinePass.edgeThickness = 1.5
   outlinePass.visibleEdgeColor = new THREE.Color('#2a2a2a')
   outlinePass.hiddenEdgeColor = new THREE.Color('#2a2a2a')
   composer.addPass(outlinePass)
-
-  const sketchPass = new ShaderPass(SketchPostShader)
-  sketchPass.uniforms['uResolution']!.value.set(clientWidth, clientHeight)
-  composer.addPass(sketchPass)
 
   const paperPass = new ShaderPass(PaperTextureShader)
   composer.addPass(paperPass)
@@ -101,6 +99,8 @@ onMounted(() => {
   const moonMesh = createMoon(scene)
   const stickFigure = createStickFigure(scene, outlineObjects)
 
+  const cats: CatRefs[] = CAT_VARIANTS.map((variant) => createCat(variant, scene, outlineObjects))
+
   const biomeManager = new DynamicBiomeManager(earth, biomeSeeds, outlineObjects, outlinePass)
 
   const sceneRefs = {
@@ -114,11 +114,11 @@ onMounted(() => {
     moonLight,
     stickFigure,
     starParticles,
-    sketchPass,
     paperPass,
     bgShaderMaterial: bgMaterial,
     biomeManager,
     npcManager: null as NpcManager | null,
+    cats,
   }
 
   useSceneAnimation(sceneRefs)

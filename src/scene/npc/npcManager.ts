@@ -15,12 +15,30 @@ export interface NpcVisibilityState {
   rotation: number
 }
 
+interface NpcAnimState {
+  spawnDecided: boolean
+  shouldSpawn: boolean
+  currentPhi: number
+  smoothScreenX: number
+  smoothScreenY: number
+  smoothRotation: number
+  smoothInitialized: boolean
+  waveBlend: number
+  flagFreq: number
+  prevDot: number
+  hasPassed: boolean
+}
+
 const VISIBLE_DOT_THRESHOLD = Math.cos(Math.PI / 3)
 const NAME_DOT_THRESHOLD = Math.cos(Math.PI / 10)
 
 const SPAWN_PROBABILITY = 0.7
-const WAVE_BLEND_SPEED = 0.08
+const WAVE_BLEND_SPEED = 0.05
 const NAME_LERP_FACTOR = 0.15
+
+const FLAG_FREQ_IDLE = 2.5
+const FLAG_FREQ_WAVE = 5
+const FLAG_FREQ_LERP = 0.08
 
 export class NpcManager {
   private npcRefsList: NpcRefs[]
@@ -33,16 +51,8 @@ export class NpcManager {
   private readonly _worldPos = new THREE.Vector3()
   private readonly _screenPos = new THREE.Vector3()
   private readonly _worldPos2 = new THREE.Vector3()
-  private readonly _screenPos2 = new THREE.Vector3()
 
-  private _spawnDecided: boolean[] = []
-  private _shouldSpawn: boolean[] = []
-  private _currentPhis: number[] = []
-  private _smoothScreenX: number[] = []
-  private _smoothScreenY: number[] = []
-  private _smoothRotation: number[] = []
-  private _smoothInitialized: boolean[] = []
-  private _waveBlend: number[] = []
+  private _npcStates: NpcAnimState[] = []
 
   constructor(
     npcRefsList: NpcRefs[],
@@ -55,92 +65,98 @@ export class NpcManager {
     this.camera = camera
     this.visibilityStates = visibilityStates
     this.earth = earth
-    this._spawnDecided = new Array(npcRefsList.length).fill(false)
-    this._shouldSpawn = new Array(npcRefsList.length).fill(false)
-    this._currentPhis = [...initialPhis]
-    this._smoothScreenX = new Array(npcRefsList.length).fill(0)
-    this._smoothScreenY = new Array(npcRefsList.length).fill(0)
-    this._smoothRotation = new Array(npcRefsList.length).fill(0)
-    this._smoothInitialized = new Array(npcRefsList.length).fill(false)
-    this._waveBlend = new Array(npcRefsList.length).fill(0)
+    this._npcStates = npcRefsList.map((_, i) => ({
+      spawnDecided: false,
+      shouldSpawn: false,
+      currentPhi: initialPhis[i]!,
+      smoothScreenX: 0,
+      smoothScreenY: 0,
+      smoothRotation: 0,
+      smoothInitialized: false,
+      waveBlend: 0,
+      flagFreq: FLAG_FREQ_IDLE,
+      prevDot: 0,
+      hasPassed: false,
+    }))
   }
 
   update(earthRotationZ: number, currentTimeSeconds: number): void {
     const charDirX = Math.sin(earthRotationZ)
     const charDirY = Math.cos(earthRotationZ)
-    const charDirZ = 0
 
     const newStates: NpcVisibilityState[] = []
 
     for (let i = 0; i < this.npcRefsList.length; i++) {
       const npcRefs = this.npcRefsList[i]!
+      const state = this._npcStates[i]!
       const pos = npcRefs.group.position
-      const len = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z)
+      const len = pos.length()
 
       const npcDirX = len > 0 ? pos.x / len : 0
       const npcDirY = len > 0 ? pos.y / len : 0
-      const npcDirZ = len > 0 ? pos.z / len : 0
 
-      const dot = charDirX * npcDirX + charDirY * npcDirY + charDirZ * npcDirZ
+      const dot = charDirX * npcDirX + charDirY * npcDirY
 
       const inRange = dot >= VISIBLE_DOT_THRESHOLD
 
       if (!inRange) {
-        if (this._spawnDecided[i]) {
-          const randomPhi = generateNonOverlappingPhi(this._currentPhis, i)
-          this._currentPhis[i] = randomPhi
+        if (state.spawnDecided) {
+          const randomPhi = generateNonOverlappingPhi(this._npcStates.map((s) => s.currentPhi), i)
+          state.currentPhi = randomPhi
           repositionNpc(npcRefs, NPC_THETA, randomPhi)
-          this._spawnDecided[i] = false
-          this._shouldSpawn[i] = false
-          this._smoothInitialized[i] = false
-          this._waveBlend[i] = 0
+          state.spawnDecided = false
+          state.shouldSpawn = false
+          state.smoothInitialized = false
+          state.waveBlend = 0
+          state.prevDot = 0
+          state.hasPassed = false
         }
         npcRefs.group.visible = false
         this.resetWaveAnimation(npcRefs)
-        newStates.push({
-          username: npcRefs.npcData.id,
-          visible: false,
-          showName: false,
-          screenX: 0,
-          screenY: 0,
-          rotation: 0,
-        })
+        newStates.push(this.buildHiddenState(npcRefs))
         continue
       }
 
-      if (!this._spawnDecided[i]) {
-        this._shouldSpawn[i] = Math.random() < SPAWN_PROBABILITY
-        this._spawnDecided[i] = true
+      if (!state.spawnDecided) {
+        state.shouldSpawn = Math.random() < SPAWN_PROBABILITY
+        state.spawnDecided = true
       }
 
-      const isVisible = this._shouldSpawn[i] ?? false
+      const isVisible = state.shouldSpawn
       npcRefs.group.visible = isVisible
 
       if (!isVisible) {
         this.resetWaveAnimation(npcRefs)
-        newStates.push({
-          username: npcRefs.npcData.id,
-          visible: false,
-          showName: false,
-          screenX: 0,
-          screenY: 0,
-          rotation: 0,
-        })
+        newStates.push(this.buildHiddenState(npcRefs))
         continue
       }
 
-      this.animateFlag(npcRefs, currentTimeSeconds, i)
-
       let showName = dot >= NAME_DOT_THRESHOLD
 
-      if (showName) {
-        this._waveBlend[i] = Math.min(1, (this._waveBlend[i] ?? 0) + WAVE_BLEND_SPEED)
+      // 追蹤 dot 峰值，下降超過緩衝量才判定為走過
+      if (dot >= state.prevDot) {
+        state.prevDot = dot
+      }
+      if (!state.hasPassed && state.prevDot - dot > 0.005) {
+        state.hasPassed = true
+      }
+      // 一旦走過就鎖定，直到離開可見範圍才重置
+      if (!showName) {
+        state.hasPassed = false
+        state.prevDot = 0
+      }
+      const shouldWave = showName && !state.hasPassed
+
+      if (shouldWave) {
+        state.waveBlend = Math.min(1, state.waveBlend + WAVE_BLEND_SPEED)
       } else {
-        this._waveBlend[i] = Math.max(0, (this._waveBlend[i] ?? 0) - WAVE_BLEND_SPEED)
+        state.waveBlend = Math.max(0, state.waveBlend - WAVE_BLEND_SPEED)
       }
 
-      if (this._waveBlend[i]! > 0.001) {
-        this.animateWaveBlended(npcRefs, currentTimeSeconds, i, this._waveBlend[i]!)
+      this.animateFlag(npcRefs, currentTimeSeconds, i, state.waveBlend)
+
+      if (state.waveBlend > 0.001) {
+        this.animateWaveBlended(npcRefs, currentTimeSeconds, i, state.waveBlend)
       } else {
         this.resetWaveAnimation(npcRefs)
       }
@@ -149,21 +165,21 @@ export class NpcManager {
       let rotation = 0
 
       if (showName) {
-        const coords = this.calculateScreenPosition(npcRefs, earthRotationZ, this._currentPhis[i]!)
+        const coords = this.calculateScreenPosition(npcRefs, earthRotationZ, state.currentPhi)
         if (coords) {
-          if (!this._smoothInitialized[i]) {
-            this._smoothScreenX[i] = coords.screenX
-            this._smoothScreenY[i] = coords.screenY
-            this._smoothRotation[i] = coords.rotation
-            this._smoothInitialized[i] = true
+          if (!state.smoothInitialized) {
+            state.smoothScreenX = coords.screenX
+            state.smoothScreenY = coords.screenY
+            state.smoothRotation = coords.rotation
+            state.smoothInitialized = true
           } else {
-            this._smoothScreenX[i] = this._smoothScreenX[i]! + (coords.screenX - this._smoothScreenX[i]!) * NAME_LERP_FACTOR
-            this._smoothScreenY[i] = this._smoothScreenY[i]! + (coords.screenY - this._smoothScreenY[i]!) * NAME_LERP_FACTOR
-            this._smoothRotation[i] = this._smoothRotation[i]! + (coords.rotation - this._smoothRotation[i]!) * NAME_LERP_FACTOR
+            state.smoothScreenX = state.smoothScreenX + (coords.screenX - state.smoothScreenX) * NAME_LERP_FACTOR
+            state.smoothScreenY = state.smoothScreenY + (coords.screenY - state.smoothScreenY) * NAME_LERP_FACTOR
+            state.smoothRotation = state.smoothRotation + (coords.rotation - state.smoothRotation) * NAME_LERP_FACTOR
           }
-          screenX = this._smoothScreenX[i]!
-          screenY = this._smoothScreenY[i]!
-          rotation = this._smoothRotation[i]!
+          screenX = state.smoothScreenX
+          screenY = state.smoothScreenY
+          rotation = state.smoothRotation
         } else {
           showName = false
         }
@@ -182,26 +198,45 @@ export class NpcManager {
     this.visibilityStates.value = newStates
   }
 
-  private animateWaveBlended(npcRefs: NpcRefs, currentTimeSeconds: number, index: number, blend: number): void {
-    const phase = index * 0.5
-    const targetUpperZ = Math.sin(currentTimeSeconds * 5 + phase) * 0.3 + 2.0
-    const targetForearmX = Math.sin(currentTimeSeconds * 5 + Math.PI / 4 + phase) * 0.2 - 0.8
+  private buildHiddenState(npcRefs: NpcRefs): NpcVisibilityState {
+    return {
+      username: npcRefs.npcData.id,
+      visible: false,
+      showName: false,
+      screenX: 0,
+      screenY: 0,
+      rotation: 0,
+    }
+  }
 
+  private animateWaveBlended(npcRefs: NpcRefs, currentTimeSeconds: number, index: number, blend: number): void {
+    const easedBlend = blend * blend * (3 - 2 * blend)
+    const phase = index * 0.5
+
+    // 右手揮手
+    const targetUpperZ = Math.sin(currentTimeSeconds * 14 + phase) * 0.3 + 2.0
+    const targetForearmX = Math.sin(currentTimeSeconds * 14 + Math.PI / 4 + phase) * 0.2 - 0.8
     npcRefs.rightUpperArmPivot.rotation.x = 0
-    npcRefs.rightUpperArmPivot.rotation.z = targetUpperZ * blend
-    npcRefs.rightForearmPivot.rotation.x = targetForearmX * blend
+    npcRefs.rightUpperArmPivot.rotation.z = targetUpperZ * easedBlend
+    npcRefs.rightForearmPivot.rotation.x = targetForearmX * easedBlend
+
+    // 身體微晃
+    npcRefs.bodyGroup.rotation.z = Math.sin(currentTimeSeconds * 20 + phase + 0.5) * 0.005 * easedBlend
   }
 
   private resetWaveAnimation(npcRefs: NpcRefs): void {
     npcRefs.rightUpperArmPivot.rotation.x = 0
     npcRefs.rightUpperArmPivot.rotation.z = 0
     npcRefs.rightForearmPivot.rotation.x = 0
+    npcRefs.bodyGroup.rotation.z = 0
   }
 
-  private animateFlag(npcRefs: NpcRefs, currentTimeSeconds: number, index: number): void {
+  private animateFlag(npcRefs: NpcRefs, currentTimeSeconds: number, index: number, waveBlend: number): void {
+    const state = this._npcStates[index]!
     const phase = index * 1.3
-    // 繞 Y 軸旋轉：旗桿側固定，自由端前後擺動（像風吹旗幟）
-    npcRefs.flagFaceGroup.rotation.y = Math.sin(currentTimeSeconds * 2.5 + phase) * 0.15
+    const targetFreq = waveBlend > 0.001 ? FLAG_FREQ_WAVE : FLAG_FREQ_IDLE
+    state.flagFreq = state.flagFreq + (targetFreq - state.flagFreq) * FLAG_FREQ_LERP
+    npcRefs.flagFaceGroup.rotation.y = Math.sin(currentTimeSeconds * state.flagFreq + phase) * 0.15
   }
 
   private calculateScreenPosition(npcRefs: NpcRefs, earthRotationZ: number, npcPhi: number): { screenX: number; screenY: number; rotation: number } | null {
@@ -290,8 +325,12 @@ export class NpcManager {
         const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
         for (const mat of materials) {
           if (mat instanceof THREE.Material) {
-            if ('map' in mat && mat.map instanceof THREE.Texture) {
-              mat.map.dispose()
+            const matAny = mat as unknown as Record<string, unknown>
+            for (const key of Object.keys(matAny)) {
+              const value = matAny[key]
+              if (value instanceof THREE.Texture) {
+                value.dispose()
+              }
             }
             mat.dispose()
           }

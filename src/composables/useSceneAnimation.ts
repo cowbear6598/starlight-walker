@@ -3,13 +3,14 @@ import type { Ref } from 'vue'
 import { onUnmounted } from 'vue'
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { CAMERA_HALF_FOV_TAN, CAMERA_Z, EARTH_RADIUS, EARTH_Y, MOON_X, MOON_Z, SCENE_ASPECT } from '@/constants/scene'
+import { CAMERA_HALF_FOV_TAN, CAMERA_Z, EARTH_RADIUS, EARTH_Y, MOON_DEPTH_MULTIPLIER, MOON_HALF_WIDTH, MOON_PARALLAX_FACTOR, MOON_RANGE_WIDTH, MOON_X, SCENE_ASPECT, STAR_PARALLAX_DEPTH_BASE, STAR_PARALLAX_FACTOR } from '@/constants/scene'
 import { applyStarAppearance, spawnStar } from '@/scene/createStars'
 import type { StarParticle } from '@/scene/createStars'
 import type { StickFigureRefs } from '@/scene/createStickFigure'
 import type { DynamicBiomeManager } from '@/scene/biomeObjects/dynamicBiomeManager'
 import { disposeSharedToonGradientMap } from '@/scene/materials'
 import type { NpcManager } from '@/scene/npc/npcManager'
+import type { CatRefs } from '@/scene/cat/createCat'
 
 export interface SceneRefs {
   containerRef: Ref<HTMLDivElement | undefined>
@@ -22,23 +23,17 @@ export interface SceneRefs {
   moonLight: THREE.PointLight
   stickFigure: StickFigureRefs
   starParticles: StarParticle[]
-  sketchPass: ShaderPass
   paperPass: ShaderPass
   bgShaderMaterial: THREE.ShaderMaterial
   biomeManager: DynamicBiomeManager
   npcManager: NpcManager | null
+  cats: CatRefs[]
 }
 
 const MAX_ALIVE_STARS = 15
 
-const STAR_PARALLAX_FACTOR = 0.45
-const STAR_PARALLAX_DEPTH_BASE = 12
-const MOON_PARALLAX_FACTOR = 0.25
-
-const MOON_DEPTH = CAMERA_Z - MOON_Z
-const MOON_DEPTH_MULTIPLIER = STAR_PARALLAX_DEPTH_BASE / MOON_DEPTH
-const MOON_HALF_WIDTH = CAMERA_HALF_FOV_TAN * MOON_DEPTH * SCENE_ASPECT
-const MOON_RANGE_WIDTH = MOON_HALF_WIDTH * 2
+const TAIL_FREQS = [1.2, 1.5, 1.8, 2.2, 2.8] as const
+const TAIL_AMPS = [0.1, 0.12, 0.15, 0.18, 0.2] as const
 
 const CAPE_Z_WAVES = [
   { timeFreq: 2.3, spaceFreq: 4.0, seedMul: 1.0, amplitude: 0.12 },
@@ -70,7 +65,6 @@ export function useSceneAnimation(refs: SceneRefs): void {
 
   const timeUniformSources = [
     refs.bgShaderMaterial.uniforms['uTime'],
-    refs.sketchPass.uniforms['uTime'],
     refs.paperPass.uniforms['uTime'],
   ].filter((u): u is { value: number } => u !== undefined)
 
@@ -132,7 +126,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
     // 死亡粒子有機率重生
     for (const particle of refs.starParticles) {
       if (particle.life <= 0 && aliveCount < MAX_ALIVE_STARS && Math.random() < 0.05) {
-        spawnStar(particle, refs.starParticles)
+        spawnStar(particle, refs.starParticles, earthRotationZ)
         aliveCount++
       }
     }
@@ -211,6 +205,28 @@ export function useSceneAnimation(refs: SceneRefs): void {
     animateLantern(walkTime, currentTimeSeconds)
   }
 
+  function animateCats(currentTimeSeconds: number): void {
+    for (const cat of refs.cats) {
+      const catWalkTime = currentTimeSeconds * 2.8 + cat.variant.walkPhaseOffset
+
+      cat.leftFrontLegPivot.rotation.z = Math.sin(catWalkTime) * 0.25
+      cat.rightBackLegPivot.rotation.z = Math.sin(catWalkTime) * 0.25
+      cat.rightFrontLegPivot.rotation.z = Math.sin(catWalkTime + Math.PI) * 0.25
+      cat.leftBackLegPivot.rotation.z = Math.sin(catWalkTime + Math.PI) * 0.25
+
+      for (let i = 0; i < cat.tailSegments.length; i++) {
+        const freq = TAIL_FREQS[i]!
+        const amp = TAIL_AMPS[i]!
+        const phase = currentTimeSeconds * freq + cat.variant.walkPhaseOffset + i * 0.8
+        cat.tailSegments[i]!.rotation.x = Math.sin(phase) * amp
+      }
+
+      cat.bodyGroup.position.y = Math.sin(catWalkTime * 2) * 0.004
+      cat.bodyGroup.position.z = Math.sin(currentTimeSeconds * 0.7 + cat.variant.walkPhaseOffset * 2) * 0.006
+      cat.bodyGroup.rotation.z = Math.sin(catWalkTime) * 0.015
+    }
+  }
+
   function animateCape(currentTimeSeconds: number): void {
     const { capeMesh, originalCapePositions: original, capeVertexSeeds: seeds } = refs.stickFigure
     const capeGeo = capeMesh.geometry
@@ -253,7 +269,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
       lastTimestamp = timestamp
       return
     }
-    const deltaTimeSeconds = Math.min((timestamp - lastTimestamp) / 1000, 0.1)
+    const deltaTimeSeconds = Math.min(Math.max((timestamp - lastTimestamp) / 1000, 0), 0.1)
     lastTimestamp = timestamp
     const currentTimeSeconds = timestamp * 0.001
 
@@ -264,6 +280,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
     animateMoon(currentTimeSeconds, refs.earth.rotation.z)
     animateStarParticles(deltaTimeSeconds, refs.earth.rotation.z)
     animateStickFigure(currentTimeSeconds)
+    animateCats(currentTimeSeconds)
     animateCape(currentTimeSeconds)
     updateShaderUniforms(currentTimeSeconds)
 
@@ -278,9 +295,6 @@ export function useSceneAnimation(refs: SceneRefs): void {
     refs.camera.updateProjectionMatrix()
     refs.renderer.setSize(w, h)
     refs.composer.setSize(w, h)
-    if (refs.sketchPass.uniforms['uResolution']) {
-      refs.sketchPass.uniforms['uResolution']!.value.set(w, h)
-    }
   }
 
   function disposeSceneResources(): void {

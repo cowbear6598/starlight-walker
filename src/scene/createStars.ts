@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { CAMERA_HALF_FOV_TAN, CAMERA_Z, MOON_X, MOON_Y, MOON_Z, SCENE_ASPECT } from '@/constants/scene'
+import { CAMERA_HALF_FOV_TAN, CAMERA_Z, MOON_DEPTH_MULTIPLIER, MOON_HALF_HEIGHT, MOON_HALF_WIDTH, MOON_PARALLAX_FACTOR, MOON_X, MOON_Y, SCENE_ASPECT, STAR_PARALLAX_DEPTH_BASE, STAR_PARALLAX_FACTOR } from '@/constants/scene'
 import { pickRandom } from '@/utils/random'
 
 export interface StarParticle {
@@ -58,29 +58,32 @@ function normalizeStarY(worldY: number, halfHeight: number): number {
   return Math.min(Math.max((worldY - halfHeight * STAR_Y_BOTTOM_FACTOR) / (halfHeight * (1 - STAR_Y_BOTTOM_FACTOR)), 0), 0.999)
 }
 
-const MOON_DISTANCE_FROM_CAMERA = CAMERA_Z - MOON_Z
-const MOON_HALF_HEIGHT = CAMERA_HALF_FOV_TAN * MOON_DISTANCE_FROM_CAMERA
-const MOON_HALF_WIDTH = MOON_HALF_HEIGHT * SCENE_ASPECT
-const MOON_NORMALIZED_X = Math.min(Math.max((MOON_X + MOON_HALF_WIDTH) / (2 * MOON_HALF_WIDTH), 0), 0.999)
-const MOON_NORMALIZED_Y = normalizeStarY(MOON_Y, MOON_HALF_HEIGHT)
-const MOON_CELL = Math.floor(MOON_NORMALIZED_Y * ROWS) * COLS + Math.floor(MOON_NORMALIZED_X * COLS)
+function calculateMoonCell(earthRotationZ: number): number {
+  const rawOffsetX = -earthRotationZ * MOON_PARALLAX_FACTOR * MOON_DEPTH_MULTIPLIER
+  const moonVisualX = MOON_X + rawOffsetX
+  const normalizedX = Math.min(Math.max((moonVisualX + MOON_HALF_WIDTH) / (2 * MOON_HALF_WIDTH), 0), 0.999)
+  const normalizedY = normalizeStarY(MOON_Y, MOON_HALF_HEIGHT)
+  return Math.floor(normalizedY * ROWS) * COLS + Math.floor(normalizedX * COLS)
+}
 
 function buildStarGridDensity(
   excludeParticle: StarParticle,
   allParticles: StarParticle[],
   gridCols: number,
   gridRows: number,
+  earthRotationZ: number,
 ): number[] {
   const grid = new Array(gridCols * gridRows).fill(0)
   for (const particle of allParticles) {
     if (particle.life <= 0 || particle === excludeParticle) continue
     const worldZ = particle.mesh.position.z
     const worldY = particle.mesh.position.y
-    const worldX = particle.originX
     const distanceFromCamera = CAMERA_Z - worldZ
+    const depthMultiplier = STAR_PARALLAX_DEPTH_BASE / Math.max(distanceFromCamera, 0.001)
+    const visualX = particle.originX + (-earthRotationZ * STAR_PARALLAX_FACTOR * depthMultiplier)
     const halfHeight = CAMERA_HALF_FOV_TAN * distanceFromCamera
     const halfWidth = halfHeight * SCENE_ASPECT
-    const normalizedX = Math.min(Math.max((worldX + halfWidth) / (2 * halfWidth), 0), 0.999)
+    const normalizedX = Math.min(Math.max((visualX + halfWidth) / (2 * halfWidth), 0), 0.999)
     const normalizedY = normalizeStarY(worldY, halfHeight)
     const col = Math.floor(normalizedX * gridCols)
     const row = Math.floor(normalizedY * gridRows)
@@ -89,14 +92,24 @@ function buildStarGridDensity(
   return grid
 }
 
-function findSparsestGridCell(grid: number[], moonCell: number): number {
-  const minCount = Math.min(...grid.filter((_, i) => i !== moonCell))
+function findSparsestGridCell(grid: (number | null)[], moonCell: number): number {
+  let minDensity = Infinity
   const candidates: number[] = []
+
   for (let i = 0; i < grid.length; i++) {
-    if (i !== moonCell && grid[i] === minCount) candidates.push(i)
+    if (i === moonCell || grid[i] === null) continue
+    const density = grid[i]!
+    if (density < minDensity) {
+      minDensity = density
+      candidates.length = 0
+      candidates.push(i)
+    } else if (density === minDensity) {
+      candidates.push(i)
+    }
   }
-  if (candidates.length === 0) return 0
-  return candidates[Math.floor(Math.random() * candidates.length)] as number
+
+  if (candidates.length === 0) return Math.floor(Math.random() * grid.length)
+  return candidates[Math.floor(Math.random() * candidates.length)]!
 }
 
 function calculateWorldPositionFromCell(
@@ -144,16 +157,20 @@ export function applyStarAppearance(particle: StarParticle): void {
     const t = particle.life / 0.3
     mat.opacity = 0.9 * t
   }
+
+  particle.mesh.visible = mat.opacity > 0
 }
 
-export function spawnStar(particle: StarParticle, allParticles: StarParticle[]): void {
-  const grid = buildStarGridDensity(particle, allParticles, COLS, ROWS)
-
-  const chosenCell = findSparsestGridCell(grid, MOON_CELL)
+export function spawnStar(particle: StarParticle, allParticles: StarParticle[], earthRotationZ: number): void {
+  const grid = buildStarGridDensity(particle, allParticles, COLS, ROWS, earthRotationZ)
+  const moonCell = calculateMoonCell(earthRotationZ)
+  const chosenCell = findSparsestGridCell(grid, moonCell)
   const { x, y, z } = calculateWorldPositionFromCell(chosenCell, COLS, ROWS)
 
+  const depthMultiplier = STAR_PARALLAX_DEPTH_BASE / Math.max(CAMERA_Z - z, 0.001)
+  const currentOffset = -earthRotationZ * STAR_PARALLAX_FACTOR * depthMultiplier
+  particle.originX = x - currentOffset
   particle.mesh.position.set(x, y, z)
-  particle.originX = x
   particle.mesh.rotation.set(0, 0, Math.random() * Math.PI * 2)
   particle.life = 1.0
   particle.maxLife = 15 + Math.random() * 15
@@ -161,7 +178,7 @@ export function spawnStar(particle: StarParticle, allParticles: StarParticle[]):
   const distanceFromCamera = CAMERA_Z - z
   const depthScale = distanceFromCamera / 12
   particle.baseScale = (0.03 + Math.random() * 0.05) * depthScale
-  particle.mesh.visible = true
+  particle.mesh.visible = false
   if (particle.mesh.material instanceof THREE.MeshBasicMaterial) {
     particle.mesh.material.opacity = 0
     // 30% 機率是亮星，用 color 放大亮度讓 bloom pass 偵測
@@ -204,7 +221,7 @@ export function createStars(scene: THREE.Scene, outlineObjects: THREE.Object3D[]
   // Prewarm：預先生成星星並分散在不同生命階段，避免開場時天空空白
   for (let i = 0; i < 18; i++) {
     const particle = starParticles[i]!
-    spawnStar(particle, starParticles)
+    spawnStar(particle, starParticles, 0)
     particle.life = 0.1 + Math.random() * 0.7
     applyStarAppearance(particle)
   }
