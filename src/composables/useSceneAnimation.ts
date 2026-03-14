@@ -9,6 +9,7 @@ import type { StarParticle } from '@/scene/createStars'
 import type { StickFigureRefs } from '@/scene/createStickFigure'
 import type { DynamicBiomeManager } from '@/scene/biomeObjects/dynamicBiomeManager'
 import { disposeSharedToonGradientMap } from '@/scene/materials'
+import type { NpcManager } from '@/scene/npc/npcManager'
 
 export interface SceneRefs {
   containerRef: Ref<HTMLDivElement | undefined>
@@ -24,6 +25,7 @@ export interface SceneRefs {
   paperPass: ShaderPass
   bgShaderMaterial: THREE.ShaderMaterial
   biomeManager: DynamicBiomeManager
+  npcManager: NpcManager | null
 }
 
 const MAX_ALIVE_STARS = 15
@@ -230,6 +232,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
     animateEarth()
     refs.biomeManager.update(refs.earth.rotation.z)
     refs.biomeManager.animateFish(currentTimeSeconds)
+    refs.npcManager?.update(refs.earth.rotation.z, currentTimeSeconds)
     animateMoon(currentTimeSeconds)
     animateStarParticles(deltaTimeSeconds)
     animateStickFigure(currentTimeSeconds)
@@ -253,6 +256,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
   }
 
   function disposeSceneResources(): void {
+    refs.npcManager?.dispose()
     refs.biomeManager.dispose()
     disposeSharedToonGradientMap()
 

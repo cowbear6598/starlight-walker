@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { EARTH_RADIUS, EARTH_Y } from '@/constants/scene'
 import { getSharedToonGradientMap } from '@/scene/materials'
+import { createToonMaterial, createLimbPivot } from '@/scene/shared'
 
 // 角色幾何尺寸
 const HEAD_RADIUS = 0.18
@@ -96,20 +97,6 @@ function createLantern(toonGradientMap: THREE.DataTexture): LanternRefs {
   lanternGroup.add(lanternLight)
 
   return { lanternGroup, lanternLight, lanternOrb }
-}
-
-function createLimbPivot(
-  position: [number, number, number],
-  meshSize: [number, number, number],
-  meshOffsetY: number,
-  material: THREE.MeshToonMaterial,
-): { pivot: THREE.Group; mesh: THREE.Mesh } {
-  const pivot = new THREE.Group()
-  pivot.position.set(...position)
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(...meshSize), material)
-  mesh.position.y = meshOffsetY
-  pivot.add(mesh)
-  return { pivot, mesh }
 }
 
 function addHatDecoration(hat: THREE.Mesh): void {
@@ -283,14 +270,10 @@ export function createStickFigure(scene: THREE.Scene, outlineObjects: THREE.Obje
   const toonGradientMap = getSharedToonGradientMap()
   const { lanternGroup, lanternLight, lanternOrb } = createLantern(toonGradientMap)
 
-  function createToonMaterial(color: string): THREE.MeshToonMaterial {
-    return new THREE.MeshToonMaterial({ color, gradientMap: toonGradientMap })
-  }
-
   const stickFigure = new THREE.Group()
-  const darkGrayMat = createToonMaterial('#4a4a4a')
-  const lightGrayMat = createToonMaterial('#6a6a6a')
-  const headMat = createToonMaterial('#7a7a7a')
+  const darkGrayMat = createToonMaterial('#4a4a4a', toonGradientMap)
+  const lightGrayMat = createToonMaterial('#6a6a6a', toonGradientMap)
+  const headMat = createToonMaterial('#7a7a7a', toonGradientMap)
 
   const head = createHeadAndHat(headMat, toonGradientMap)
   stickFigure.add(head)

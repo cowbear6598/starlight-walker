@@ -1,8 +1,8 @@
 import * as THREE from 'three'
 import type { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
-import type { BiomeSeed } from '@/scene/createEarth'
+import type { BiomeSeed, BiomeType } from '@/scene/createEarth'
 import { classifyBiomeWithSafety } from '@/scene/createEarth'
-import { EARTH_RADIUS } from '@/constants/scene'
+import { sphericalToCartesian } from '@/scene/shared'
 import {
   cellKeyFromIndices,
   getCellCenter,
@@ -13,7 +13,6 @@ import {
 } from '@/scene/biomeObjects/gridSystem'
 import type { GridCellKey } from '@/scene/biomeObjects/gridSystem'
 import { ObjectPool } from '@/scene/biomeObjects/objectPool'
-import type { BiomeType } from '@/scene/createEarth'
 
 export interface FishAnimationData {
   seed: number
@@ -30,15 +29,6 @@ const OBJECTS_PER_CELL = { min: 1, max: 2 }
 const OCEAN_OBJECTS_PER_CELL = { min: 1, max: 1 }
 const SURFACE_OFFSET = 0.01
 const OCEAN_FLOAT_OFFSET = 0.05
-
-function sphericalToCartesian(theta: number, phi: number): THREE.Vector3 {
-  const cosPhi = Math.cos(phi)
-  return new THREE.Vector3(
-    EARTH_RADIUS * cosPhi * Math.cos(theta),
-    EARTH_RADIUS * Math.sin(phi),
-    EARTH_RADIUS * cosPhi * Math.sin(theta),
-  )
-}
 
 function orientToSurface(
   object: THREE.Object3D,

@@ -15,9 +15,17 @@ import { DynamicBiomeManager } from '@/scene/biomeObjects/dynamicBiomeManager'
 import { createMoon } from '@/scene/createMoon'
 import { createStars } from '@/scene/createStars'
 import { createStickFigure } from '@/scene/createStickFigure'
+import { getSharedToonGradientMap } from '@/scene/materials'
+import { NPC_LIST, NPC_THETA } from '@/scene/npc/npcConfig'
+import { preloadAvatarTextures, createNpc } from '@/scene/npc/createNpc'
+import { NpcManager } from '@/scene/npc/npcManager'
+import type { NpcVisibilityState } from '@/scene/npc/npcManager'
+import { useNpcInteraction } from '@/composables/useNpcInteraction'
 import { useSceneAnimation } from '@/composables/useSceneAnimation'
+import NpcNameLabel from '@/components/scene/NpcNameLabel.vue'
 
 const containerRef = ref<HTMLDivElement>()
+const npcVisibilityStates = ref<NpcVisibilityState[]>([])
 
 onMounted(() => {
   if (!containerRef.value) return
@@ -95,7 +103,7 @@ onMounted(() => {
 
   const biomeManager = new DynamicBiomeManager(earth, biomeSeeds, outlineObjects, outlinePass)
 
-  useSceneAnimation({
+  const sceneRefs = {
     containerRef,
     renderer,
     scene,
@@ -109,10 +117,43 @@ onMounted(() => {
     paperPass,
     bgShaderMaterial: bgMaterial,
     biomeManager,
+    npcManager: null as NpcManager | null,
+  }
+
+  useSceneAnimation(sceneRefs)
+
+  const toonGradientMap = getSharedToonGradientMap()
+
+  preloadAvatarTextures(NPC_LIST).then((textureMap) => {
+    const initialPhis: number[] = []
+    const npcRefsList = NPC_LIST.map((npcData) => {
+      const texture = textureMap.get(npcData.id)!
+      const phi = Math.random() * Math.PI * 2 - Math.PI
+      initialPhis.push(phi)
+      return createNpc(npcData, texture, earth, toonGradientMap, outlineObjects, NPC_THETA, phi)
+    })
+
+    const npcManager = new NpcManager(npcRefsList, camera, npcVisibilityStates, earth, initialPhis)
+    sceneRefs.npcManager = npcManager
+
+    const interaction = useNpcInteraction(renderer, camera, npcManager)
+    npcManager.setInteractionDispose(interaction.dispose)
+  }).catch((error) => {
+    console.error('Failed to load NPC avatar textures:', error)
   })
 })
 </script>
 
 <template>
-  <div ref="containerRef" class="w-full h-full" />
+  <div ref="containerRef" class="scene-wrapper">
+    <NpcNameLabel :labels="npcVisibilityStates" />
+  </div>
 </template>
+
+<style scoped>
+.scene-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+</style>
