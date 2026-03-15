@@ -73,10 +73,10 @@ export function createStreetLamp(toonGradientMap: THREE.DataTexture): StreetLamp
 
   // 燈籠玻璃罩（六面柱體，半透明暖色）
   const glassMat = new THREE.MeshToonMaterial({
-    color: '#997744',
+    color: '#aa7733',
     gradientMap: toonGradientMap,
     transparent: true,
-    opacity: 0.3,
+    opacity: 0.35,
   })
   const glassShade = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.08, 6), glassMat)
   glassShade.position.set(0.13, 0.59, 0)
@@ -91,9 +91,9 @@ export function createStreetLamp(toonGradientMap: THREE.DataTexture): StreetLamp
 
   // 燈泡（在燈罩內部）
   const bulbMat = new THREE.MeshBasicMaterial({
-    color: '#ffdd88',
+    color: '#ffaa55',
     transparent: true,
-    opacity: 0.1,
+    opacity: 0.25,
   })
   const bulbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 6), bulbMat)
   bulbMesh.position.set(0.13, 0.59, 0)
@@ -101,7 +101,7 @@ export function createStreetLamp(toonGradientMap: THREE.DataTexture): StreetLamp
   meshes.push(bulbMesh)
 
   // 點光源
-  const light = new THREE.PointLight('#ffcc66', 0, 1.5, 2)
+  const light = new THREE.PointLight('#ffaa44', 0.08, 3.5, 2)
   light.position.set(0.13, 0.59, 0)
   group.add(light)
 

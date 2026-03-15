@@ -18,23 +18,23 @@ export interface NpcData {
 export const NPC_LIST: NpcData[] = [
   {
     id: 'cab_late',
-    displayName: '@cab_late',
+    displayName: 'cab_late',
     threadsUsername: 'cab_late',
     avatarModule: avatarCabLate,
     hatColor: '#cc3333',
     scarfColor: '#ff6666',
   },
   {
-    id: 'darrel_tw_',
-    displayName: '@darrel_tw_',
-    threadsUsername: 'darrel_tw_',
+    id: 'darrell_tw_',
+    displayName: 'Darrell',
+    threadsUsername: 'darrell_tw_',
     avatarModule: avatarDarrelTw,
     hatColor: '#3366cc',
     scarfColor: '#6699ff',
   },
   {
     id: 'frankchen_tw',
-    displayName: '@frankchen.tw',
+    displayName: 'frankchen.tw',
     threadsUsername: 'frankchen.tw',
     avatarModule: avatarFrankchen,
     hatColor: '#9944cc',
@@ -42,7 +42,7 @@ export const NPC_LIST: NpcData[] = [
   },
   {
     id: 'supergalen0921',
-    displayName: '@supergalen0921',
+    displayName: 'supergalen0921',
     threadsUsername: 'supergalen0921',
     avatarModule: avatarSupergalen,
     hatColor: '#ccaa33',
@@ -50,7 +50,7 @@ export const NPC_LIST: NpcData[] = [
   },
   {
     id: 'yayapipifly',
-    displayName: '@yayapipifly',
+    displayName: 'yayapipifly',
     threadsUsername: 'yayapipifly',
     avatarModule: avatarYayapipifly,
     hatColor: '#cc6633',

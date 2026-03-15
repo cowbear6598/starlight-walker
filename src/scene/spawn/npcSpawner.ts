@@ -16,6 +16,8 @@ export class NpcSpawner {
   private activeNpcs: ActiveNpcEntry[] = []
   private pool: Map<string, NpcRefs> = new Map()
   private lastQueueTailId: string | null = null
+  private readonly _worldPos = new THREE.Vector3()
+  private readonly _screenPos = new THREE.Vector3()
 
   constructor(
     private npcList: NpcData[],
@@ -121,16 +123,13 @@ export class NpcSpawner {
   }
 
   update(earthRotationZ: number): void {
-    const worldPos = new THREE.Vector3()
-    const screenPos = new THREE.Vector3()
-
     for (let i = this.activeNpcs.length - 1; i >= 0; i--) {
       const entry = this.activeNpcs[i]!
-      entry.npcRefs.group.getWorldPosition(worldPos)
-      screenPos.copy(worldPos)
-      screenPos.project(this.camera)
+      entry.npcRefs.group.getWorldPosition(this._worldPos)
+      this._screenPos.copy(this._worldPos)
+      this._screenPos.project(this.camera)
 
-      if (screenPos.x > 1.1) {
+      if (this._screenPos.x > 1.1) {
         this.despawn(i)
       }
     }

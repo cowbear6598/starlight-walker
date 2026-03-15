@@ -18,21 +18,19 @@ export function updateStreetLampAnimation(
   const bulbMat = refs.bulbMesh.material
   if (!(bulbMat instanceof THREE.MeshBasicMaterial)) return
 
-  if (state === 'idle') {
-    refs.light.intensity = 0
-    bulbMat.opacity = 0.1
+  if (state === 'idle' || state === 'done') {
+    refs.light.intensity += (0.08 - refs.light.intensity) * 0.02
+    bulbMat.opacity += (0.25 - bulbMat.opacity) * 0.02
     return
   }
 
   if (state === 'activated') {
-    refs.light.intensity += (0.5 - refs.light.intensity) * 0.03
-    bulbMat.opacity += (0.6 - bulbMat.opacity) * 0.03
-    refs.light.intensity += Math.sin(currentTimeSeconds * 1.5) * 0.05
+    const baseIntensity = 1.0
+    const breathe = Math.sin(currentTimeSeconds * 1.2) * 0.08
+    refs.light.intensity += (baseIntensity + breathe - refs.light.intensity) * 0.03
+    bulbMat.opacity += (0.95 - bulbMat.opacity) * 0.03
     return
   }
-
-  refs.light.intensity += (0 - refs.light.intensity) * 0.02
-  bulbMat.opacity += (0.1 - bulbMat.opacity) * 0.02
 }
 
 export function updateMailboxAnimation(

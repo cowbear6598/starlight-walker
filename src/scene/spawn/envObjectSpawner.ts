@@ -128,10 +128,10 @@ export class EnvObjectSpawner {
   private resetEntryState(entry: EnvObjectEntry): void {
     if (entry.type === 'streetLamp') {
       const refs = entry.refs as StreetLampRefs
-      refs.light.intensity = 0
+      refs.light.intensity = 0.08
       const mat = refs.bulbMesh.material
       if (mat instanceof THREE.MeshBasicMaterial) {
-        mat.opacity = 0.1
+        mat.opacity = 0.25
       }
       return
     }
@@ -152,14 +152,19 @@ export class EnvObjectSpawner {
       return
     }
 
-    const refs = entry.refs as BenchRefs
-    refs.newspaperGroup.visible = true
-    refs.newspaperGroup.position.set(0.05, 0.19, 0.02)
-    refs.newspaperGroup.rotation.set(0, 0, 0)
-    const mat = refs.newspaperMesh.material
-    if (mat instanceof THREE.MeshBasicMaterial) {
-      mat.opacity = 1
+    if (entry.type === 'bench') {
+      const refs = entry.refs as BenchRefs
+      refs.newspaperGroup.visible = true
+      refs.newspaperGroup.position.set(0.05, 0.19, 0.02)
+      refs.newspaperGroup.rotation.set(0, 0, 0)
+      const mat = refs.newspaperMesh.material
+      if (mat instanceof THREE.MeshBasicMaterial) {
+        mat.opacity = 1
+      }
+      return
     }
+
+    throw new Error(`Unknown EnvObjectType in resetEntryState: ${entry.type}`)
   }
 
   getActiveEntries(): readonly EnvObjectEntry[] {

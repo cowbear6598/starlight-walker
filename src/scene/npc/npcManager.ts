@@ -128,6 +128,10 @@ export class NpcManager {
 
       this.animateFlag(npcRefs, currentTimeSeconds, state)
 
+      const leftArmPhase = npcRefs.npcData.id.charCodeAt(0) * 0.02
+      npcRefs.leftUpperArmPivot.rotation.x = Math.sin(currentTimeSeconds * 1.8 + leftArmPhase) * 0.3
+      npcRefs.leftForearmPivot.rotation.x = Math.sin(currentTimeSeconds * 2.2 + leftArmPhase + 0.5) * -0.2
+
       if (state.waveBlend > 0.001) {
         this.animateWaveBlended(npcRefs, currentTimeSeconds, state.waveBlend)
       } else {
@@ -160,7 +164,7 @@ export class NpcManager {
       }
 
       newStates.push({
-        username: id,
+        username: npcData.displayName,
         visible: true,
         showName,
         screenX,
