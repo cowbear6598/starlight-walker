@@ -3,7 +3,7 @@ import type { Ref } from 'vue'
 import { onUnmounted } from 'vue'
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { CAMERA_HALF_FOV_TAN, CAMERA_Z, EARTH_RADIUS, EARTH_Y, MOON_DEPTH_MULTIPLIER, MOON_HALF_WIDTH, MOON_PARALLAX_FACTOR, MOON_RANGE_WIDTH, MOON_X, SCENE_ASPECT, STAR_PARALLAX_DEPTH_BASE, STAR_PARALLAX_FACTOR } from '@/constants/scene'
+import { CAMERA_HALF_FOV_TAN, CAMERA_Z, EARTH_RADIUS, EARTH_Y, MOON_ARC_HEIGHT, MOON_DEPTH_MULTIPLIER, MOON_HALF_WIDTH, MOON_PARALLAX_FACTOR, MOON_VISUAL_RADIUS, MOON_X, MOON_Y_BASE, SCENE_ASPECT, STAR_PARALLAX_DEPTH_BASE, STAR_PARALLAX_FACTOR } from '@/constants/scene'
 import { applyStarAppearance, spawnStar } from '@/scene/createStars'
 import type { StarParticle } from '@/scene/createStars'
 import type { StickFigureRefs } from '@/scene/createStickFigure'
@@ -89,10 +89,19 @@ export function useSceneAnimation(refs: SceneRefs): void {
 
     const rawOffsetX = -earthRotationZ * MOON_PARALLAX_FACTOR * MOON_DEPTH_MULTIPLIER
     const rawX = MOON_X + rawOffsetX
-    // wrap-around：讓月亮從可見範圍一側飄出後，從另一側重新出現
-    const wrappedX = ((rawX + MOON_HALF_WIDTH) % MOON_RANGE_WIDTH + MOON_RANGE_WIDTH) % MOON_RANGE_WIDTH - MOON_HALF_WIDTH
+    // 非對稱 wrap：右邊小邊距（快速消失），左邊大邊距（從畫面外滑入）
+    const rightEdge = MOON_HALF_WIDTH + MOON_VISUAL_RADIUS * 0.4
+    const leftEdge = -(MOON_HALF_WIDTH + MOON_VISUAL_RADIUS)
+    const totalRange = rightEdge - leftEdge
+    const wrappedX = ((rawX - leftEdge) % totalRange + totalRange) % totalRange + leftEdge
+    const halfRange = (rightEdge - leftEdge) / 2
+    const center = (rightEdge + leftEdge) / 2
+    const t = (wrappedX - center) / halfRange
+    const arcY = MOON_Y_BASE + MOON_ARC_HEIGHT * (1 - t * t)
     refs.moonMesh.position.x = wrappedX
+    refs.moonMesh.position.y = arcY
     refs.moonLight.position.x = wrappedX
+    refs.moonLight.position.y = arcY
   }
 
   function animateStarParticles(deltaTimeSeconds: number, earthRotationZ: number): void {

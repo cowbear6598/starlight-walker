@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { MOON_X, MOON_Y, MOON_Z } from '@/constants/scene'
+import { MOON_ARC_HEIGHT, MOON_X, MOON_Y_BASE, MOON_Z } from '@/constants/scene'
 import { COMMON_VERTEX_SHADER, createTimeUniform } from '@/shaders/common'
 
 export function createMoon(scene: THREE.Scene): THREE.Mesh {
@@ -81,7 +81,7 @@ export function createMoon(scene: THREE.Scene): THREE.Mesh {
   })
 
   const moon = new THREE.Mesh(moonGeo, moonMat)
-  moon.position.set(MOON_X, MOON_Y, MOON_Z)
+  moon.position.set(MOON_X, MOON_Y_BASE + MOON_ARC_HEIGHT, MOON_Z)
   scene.add(moon)
 
   return moon

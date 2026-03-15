@@ -25,7 +25,8 @@ interface CellData {
 }
 
 const BIOME_BOUNDARY_MARGIN = 0.1
-const OBJECTS_PER_CELL = { min: 1, max: 2 }
+const MAX_SPAWNS_PER_FRAME = 2
+const OBJECTS_PER_CELL = { min: 1, max: 1 }
 const OCEAN_OBJECTS_PER_CELL = { min: 1, max: 1 }
 const SURFACE_OFFSET = 0.01
 const OCEAN_FLOAT_OFFSET = 0.05
@@ -86,20 +87,24 @@ export class DynamicBiomeManager {
       }
     }
 
+    let spawned = 0
     for (const cellKey of visibleCells) {
       if (!this.activeCells.has(cellKey)) {
+        if (spawned >= MAX_SPAWNS_PER_FRAME) break
         const { thetaIdx, phiIdx } = parseCellKey(cellKey)
         this.spawnCell(cellKey, thetaIdx, phiIdx)
+        spawned++
       }
     }
-
-    this.outlinePass.selectedObjects = this.outlineObjects
   }
 
   private spawnCell(cellKey: GridCellKey, thetaIdx: number, phiIdx: number): void {
     const center = getCellCenter(thetaIdx, phiIdx)
     const cellResult = classifyBiomeWithSafety(center.theta, center.phi, this.biomeSeeds, BIOME_BOUNDARY_MARGIN)
-    if (!cellResult.safe) return
+    if (!cellResult.safe) {
+      this.activeCells.set(cellKey, { meshes: [], biomeType: cellResult.type })
+      return
+    }
     const cellBiomeType = cellResult.type
 
     const isOcean = cellBiomeType === 'ocean'
@@ -136,6 +141,7 @@ export class DynamicBiomeManager {
     }
 
     this.activeCells.set(cellKey, { meshes, biomeType: cellBiomeType })
+    this.outlinePass.selectedObjects = this.outlineObjects
   }
 
   private despawnCell(cellKey: GridCellKey): void {
@@ -155,6 +161,7 @@ export class DynamicBiomeManager {
     }
 
     this.activeCells.delete(cellKey)
+    this.outlinePass.selectedObjects = this.outlineObjects
   }
 
   animateFish(currentTimeSeconds: number): void {

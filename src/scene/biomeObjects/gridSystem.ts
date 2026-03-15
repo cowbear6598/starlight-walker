@@ -25,6 +25,9 @@ export function parseCellKey(cellKey: GridCellKey): { thetaIdx: number; phiIdx: 
   const separatorIndex = cellKey.indexOf('_')
   const thetaIdx = parseInt(cellKey.slice(0, separatorIndex), 10)
   const phiIdx = parseInt(cellKey.slice(separatorIndex + 1), 10)
+  if (Number.isNaN(thetaIdx) || Number.isNaN(phiIdx)) {
+    throw new Error(`Invalid GridCellKey: "${cellKey}"`)
+  }
   return { thetaIdx, phiIdx }
 }
 

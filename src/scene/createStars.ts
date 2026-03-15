@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { CAMERA_HALF_FOV_TAN, CAMERA_Z, MOON_DEPTH_MULTIPLIER, MOON_HALF_HEIGHT, MOON_HALF_WIDTH, MOON_PARALLAX_FACTOR, MOON_X, MOON_Y, SCENE_ASPECT, STAR_PARALLAX_DEPTH_BASE, STAR_PARALLAX_FACTOR } from '@/constants/scene'
+import { CAMERA_HALF_FOV_TAN, CAMERA_Z, MOON_ARC_HEIGHT, MOON_DEPTH_MULTIPLIER, MOON_HALF_HEIGHT, MOON_HALF_WIDTH, MOON_PARALLAX_FACTOR, MOON_X, MOON_Y_BASE, SCENE_ASPECT, STAR_PARALLAX_DEPTH_BASE, STAR_PARALLAX_FACTOR } from '@/constants/scene'
 import { pickRandom } from '@/utils/random'
 
 export interface StarParticle {
@@ -62,7 +62,7 @@ function calculateMoonCell(earthRotationZ: number): number {
   const rawOffsetX = -earthRotationZ * MOON_PARALLAX_FACTOR * MOON_DEPTH_MULTIPLIER
   const moonVisualX = MOON_X + rawOffsetX
   const normalizedX = Math.min(Math.max((moonVisualX + MOON_HALF_WIDTH) / (2 * MOON_HALF_WIDTH), 0), 0.999)
-  const normalizedY = normalizeStarY(MOON_Y, MOON_HALF_HEIGHT)
+  const normalizedY = normalizeStarY(MOON_Y_BASE + MOON_ARC_HEIGHT, MOON_HALF_HEIGHT)
   return Math.floor(normalizedY * ROWS) * COLS + Math.floor(normalizedX * COLS)
 }
 

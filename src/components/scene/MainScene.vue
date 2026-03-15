@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { SCENE_ASPECT, MOON_X, MOON_Y, MOON_Z } from '@/constants/scene'
+import { SCENE_ASPECT, MOON_ARC_HEIGHT, MOON_X, MOON_Y_BASE, MOON_Z } from '@/constants/scene'
 import { PaperTextureShader } from '@/shaders/PaperTextureShader'
 import { BackgroundShader } from '@/shaders/BackgroundShader'
 import { createEarth } from '@/scene/createEarth'
@@ -80,7 +80,7 @@ onMounted(() => {
   directionalLight.position.set(3, 6, 10)
   scene.add(directionalLight)
   const moonLight = new THREE.PointLight('#f5d76e', 0.5, 50)
-  moonLight.position.set(MOON_X, MOON_Y, MOON_Z)
+  moonLight.position.set(MOON_X, MOON_Y_BASE + MOON_ARC_HEIGHT, MOON_Z)
   scene.add(moonLight)
 
   const bgGeometry = new THREE.PlaneGeometry(2, 2)

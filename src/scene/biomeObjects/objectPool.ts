@@ -4,6 +4,9 @@ import { biomeObjectConfig } from '@/scene/biomeObjects/biomeObjectConfig'
 import { getSharedToonGradientMap } from '@/scene/materials'
 
 function selectWeightedEntry<T extends { weight: number }>(entries: T[]): T {
+  if (entries.length === 0) {
+    throw new Error('No entries available for biome type')
+  }
   const totalWeight = entries.reduce((sum, e) => sum + e.weight, 0)
   let roll = Math.random() * totalWeight
 
