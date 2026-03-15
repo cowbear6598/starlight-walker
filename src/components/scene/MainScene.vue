@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { SCENE_ASPECT, MOON_ARC_HEIGHT, MOON_X, MOON_Y_BASE, MOON_Z, NPC_SPAWN_INTERVAL_MIN, NPC_SPAWN_INTERVAL_MAX, NPC_SPAWN_FIRST_DELAY_MIN, NPC_SPAWN_FIRST_DELAY_MAX, NPC_MAX_ALIVE } from '@/constants/scene'
+import { SCENE_ASPECT, MOON_ARC_HEIGHT, MOON_X, MOON_Y_BASE, MOON_Z, NPC_SPAWN_INTERVAL_MIN, NPC_SPAWN_INTERVAL_MAX, NPC_SPAWN_FIRST_DELAY_MIN, NPC_SPAWN_FIRST_DELAY_MAX, NPC_MAX_ALIVE, ENV_SPAWN_INTERVAL_MIN, ENV_SPAWN_INTERVAL_MAX, ENV_SPAWN_FIRST_DELAY_MIN, ENV_SPAWN_FIRST_DELAY_MAX, ENV_INITIAL_COUNT } from '@/constants/scene'
 import { PaperTextureShader } from '@/shaders/PaperTextureShader'
 import { BackgroundShader } from '@/shaders/BackgroundShader'
 import { createEarth } from '@/scene/createEarth'
@@ -26,6 +26,8 @@ import { SpawnTrigger } from '@/scene/spawn/spawnTrigger'
 import { NpcSpawner } from '@/scene/spawn/npcSpawner'
 import { useNpcInteraction } from '@/composables/useNpcInteraction'
 import { useSceneAnimation } from '@/composables/useSceneAnimation'
+import { EnvObjectSpawner } from '@/scene/spawn/envObjectSpawner'
+import { EnvObjectManager } from '@/scene/envObject/envObjectManager'
 import NpcNameLabel from '@/components/scene/NpcNameLabel.vue'
 
 const containerRef = ref<HTMLDivElement>()
@@ -105,6 +107,14 @@ onMounted(() => {
 
   const biomeManager = new DynamicBiomeManager(earth, faceCells, outlineObjects, outlinePass)
 
+  const toonGradientMap = getSharedToonGradientMap()
+
+  const envObjectSpawner = new EnvObjectSpawner(earth, camera, toonGradientMap, outlineObjects, outlinePass)
+  envObjectSpawner.spawnInitial(ENV_INITIAL_COUNT)
+  const envSpawnTrigger = new SpawnTrigger(ENV_SPAWN_INTERVAL_MIN, ENV_SPAWN_INTERVAL_MAX, ENV_SPAWN_FIRST_DELAY_MIN, ENV_SPAWN_FIRST_DELAY_MAX)
+  envSpawnTrigger.register({ type: 'envObject', spawn: () => envObjectSpawner.spawn() })
+  const envObjectManager = new EnvObjectManager(envObjectSpawner, earth)
+
   const sceneRefs = {
     containerRef,
     renderer,
@@ -123,11 +133,12 @@ onMounted(() => {
     spawnTrigger: null as SpawnTrigger | null,
     npcSpawner: null as NpcSpawner | null,
     cats,
+    envObjectManager: envObjectManager as EnvObjectManager | null,
+    envSpawnTrigger: envSpawnTrigger as SpawnTrigger | null,
+    envObjectSpawner: envObjectSpawner as EnvObjectSpawner | null,
   }
 
   useSceneAnimation(sceneRefs)
-
-  const toonGradientMap = getSharedToonGradientMap()
 
   preloadAvatarTextures(NPC_LIST).then((textureMap) => {
     const npcSpawner = new NpcSpawner(

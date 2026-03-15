@@ -13,6 +13,8 @@ import type { NpcManager } from '@/scene/npc/npcManager'
 import type { CatRefs } from '@/scene/cat/createCat'
 import type { SpawnTrigger } from '@/scene/spawn/spawnTrigger'
 import type { NpcSpawner } from '@/scene/spawn/npcSpawner'
+import type { EnvObjectManager } from '@/scene/envObject/envObjectManager'
+import type { EnvObjectSpawner } from '@/scene/spawn/envObjectSpawner'
 
 export interface SceneRefs {
   containerRef: Ref<HTMLDivElement | undefined>
@@ -32,6 +34,9 @@ export interface SceneRefs {
   spawnTrigger: SpawnTrigger | null
   npcSpawner: NpcSpawner | null
   cats: CatRefs[]
+  envObjectManager: EnvObjectManager | null
+  envSpawnTrigger: SpawnTrigger | null
+  envObjectSpawner: EnvObjectSpawner | null
 }
 
 const MAX_ALIVE_STARS = 15
@@ -292,6 +297,9 @@ export function useSceneAnimation(refs: SceneRefs): void {
     refs.spawnTrigger?.update(deltaTimeSeconds)
     refs.npcSpawner?.update(refs.earth.rotation.z)
     refs.npcManager?.update(refs.earth.rotation.z, currentTimeSeconds)
+    refs.envSpawnTrigger?.update(deltaTimeSeconds)
+    refs.envObjectSpawner?.update(refs.earth.rotation.z)
+    refs.envObjectManager?.update(refs.earth.rotation.z, currentTimeSeconds)
     animateMoon(currentTimeSeconds, refs.earth.rotation.z)
     animateStarParticles(deltaTimeSeconds, refs.earth.rotation.z)
     animateStickFigure(currentTimeSeconds)
@@ -314,6 +322,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
 
   function disposeSceneResources(): void {
     refs.npcManager?.dispose()
+    refs.envObjectManager?.dispose()
     refs.biomeManager.dispose()
     disposeSharedToonGradientMap()
 

@@ -33,3 +33,12 @@ export const NPC_SPAWN_INTERVAL_MAX = 45
 export const NPC_SPAWN_FIRST_DELAY_MIN = 0
 export const NPC_SPAWN_FIRST_DELAY_MAX = 0
 export const NPC_MAX_ALIVE = 3
+
+export const ENV_SPAWN_INTERVAL_MIN = 15
+export const ENV_SPAWN_INTERVAL_MAX = 25
+export const ENV_SPAWN_FIRST_DELAY_MIN = 15
+export const ENV_SPAWN_FIRST_DELAY_MAX = 25
+export const ENV_OBJECT_THETA_MIN = 0.10
+export const ENV_OBJECT_THETA_MAX = 0.20
+export const ENV_DOT_THRESHOLD = Math.cos(Math.PI / 12)
+export const ENV_INITIAL_COUNT = 2

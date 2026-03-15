@@ -1,8 +1,6 @@
 import * as THREE from 'three'
 import type { NpcData } from '@/scene/npc/npcConfig'
-import { sphericalToCartesian, createToonMaterial, createLimbPivot } from '@/scene/shared'
-
-const SURFACE_OFFSET = 0.01
+import { sphericalToCartesian, createToonMaterial, createLimbPivot, SURFACE_OFFSET } from '@/scene/shared'
 
 const HEAD_RADIUS = 0.18
 const BODY_SIZE: [number, number, number] = [0.16, 0.45, 0.1]
