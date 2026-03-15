@@ -4,8 +4,21 @@ html, body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: #b8b2ac;
+  background-color: #c8c0b3;
   background-image:
-    radial-gradient(ellipse at 20% 50%, rgba(200,190,180,0.25) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(180,170,160,0.2) 0%, transparent 50%);
+    linear-gradient(135deg, #ccc4b7 0%, #c0b8ab 100%),
+    radial-gradient(ellipse at 30% 40%, rgba(190,182,168,0.2) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 60%, rgba(190,182,168,0.15) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 80%, rgba(194,185,171,0.25) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.03) 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.04) 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.03) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    4px 4px,
+    6px 6px,
+    8px 8px;
 }

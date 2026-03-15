@@ -56,23 +56,48 @@ onUnmounted(() => {
 
   position: relative;
   padding: var(--frame-padding);
-  background: linear-gradient(145deg, #5a5048 0%, #4a4038 40%, #3a3028 100%);
+  background:
+    repeating-linear-gradient(
+      60deg,
+      rgba(100, 85, 60, 0.1) 0px,
+      transparent 1px,
+      transparent 14px,
+      rgba(100, 85, 60, 0.1) 15px
+    ),
+    repeating-linear-gradient(
+      -60deg,
+      rgba(100, 85, 60, 0.1) 0px,
+      transparent 1px,
+      transparent 14px,
+      rgba(100, 85, 60, 0.1) 15px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.06) 0px,
+      transparent 1px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.06) 3px
+    ),
+    linear-gradient(180deg, #7a6550 0%, #6b5842 50%, #5c4b38 100%);
   box-shadow:
-    8px 12px 30px rgba(0, 0, 0, 0.4),
-    4px 6px 15px rgba(0, 0, 0, 0.3),
-    inset 0 2px 3px rgba(255, 255, 255, 0.15),
-    inset 0 -2px 3px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(0, 0, 0, 0.2);
+    6px 8px 20px rgba(0, 0, 0, 0.2),
+    2px 4px 10px rgba(0, 0, 0, 0.15),
+    inset 0 2px 3px rgba(200, 180, 140, 0.15),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(80, 65, 45, 0.4);
+  outline: 2px solid rgba(80, 65, 45, 0.25);
+  outline-offset: -4px;
+  z-index: 1;
 }
 
 .gallery-frame::before {
   content: "";
   position: absolute;
   inset: var(--bevel-outer-inset);
-  border-top: 8px solid rgba(255, 255, 255, 0.12);
-  border-left: 8px solid rgba(255, 255, 255, 0.08);
-  border-bottom: 8px solid rgba(0, 0, 0, 0.15);
-  border-right: 8px solid rgba(0, 0, 0, 0.12);
+  border-top: 6px solid rgba(200, 180, 140, 0.12);
+  border-left: 6px solid rgba(200, 180, 140, 0.08);
+  border-bottom: 6px solid rgba(40, 30, 15, 0.15);
+  border-right: 6px solid rgba(40, 30, 15, 0.12);
   pointer-events: none;
 }
 
@@ -80,10 +105,10 @@ onUnmounted(() => {
   content: "";
   position: absolute;
   inset: var(--bevel-inner-inset);
-  border-top: 4px solid rgba(0, 0, 0, 0.2);
-  border-left: 4px solid rgba(0, 0, 0, 0.15);
-  border-bottom: 4px solid rgba(255, 255, 255, 0.1);
-  border-right: 4px solid rgba(255, 255, 255, 0.08);
+  border-top: 3px solid rgba(40, 30, 15, 0.15);
+  border-left: 3px solid rgba(40, 30, 15, 0.12);
+  border-bottom: 3px solid rgba(200, 180, 140, 0.08);
+  border-right: 3px solid rgba(200, 180, 140, 0.06);
   pointer-events: none;
 }
 
