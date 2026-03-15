@@ -4,6 +4,11 @@ import MainScene from '@/components/scene/MainScene.vue'
 import OrigamiIcon from '@/components/decorations/OrigamiIcon.vue'
 import CornerCloud from '@/components/decorations/CornerCloud.vue'
 import { ORIGAMI_ITEMS, CORNER_POSITIONS } from '@/constants/decorations'
+import { useTabTitle } from '@/composables/useTabTitle'
+import { useTabFavicon } from '@/composables/useTabFavicon'
+
+useTabTitle()
+useTabFavicon()
 </script>
 
 <template>
