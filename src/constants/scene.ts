@@ -42,3 +42,12 @@ export const ENV_OBJECT_THETA_MIN = 0.10
 export const ENV_OBJECT_THETA_MAX = 0.20
 export const ENV_DOT_THRESHOLD = Math.cos(Math.PI / 12)
 export const ENV_INITIAL_COUNT = 2
+
+export const METEOR_POOL_SIZE = 10
+export const METEOR_BASE_INTERVAL = 10
+export const METEOR_MIN_INTERVAL = 1
+export const METEOR_SPEED = 6
+export const METEOR_TAIL_LENGTH = 24
+export const METEOR_HEAD_BRIGHTNESS = 3.0
+export const METEOR_ANGLE_MIN = Math.PI * 1.05  // 189°, 幾乎水平偏下一點
+export const METEOR_ANGLE_MAX = Math.PI * 1.15  // 207°, 稍微再斜一點

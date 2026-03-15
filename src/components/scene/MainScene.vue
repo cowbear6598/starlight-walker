@@ -26,12 +26,15 @@ import { SpawnTrigger } from '@/scene/spawn/spawnTrigger'
 import { NpcSpawner } from '@/scene/spawn/npcSpawner'
 import { useNpcInteraction } from '@/composables/useNpcInteraction'
 import { useSceneAnimation } from '@/composables/useSceneAnimation'
+import { MeteorSystem } from '@/scene/meteor/meteorSystem'
+import { useOnlineCount } from '@/composables/useOnlineCount'
 import { EnvObjectSpawner } from '@/scene/spawn/envObjectSpawner'
 import { EnvObjectManager } from '@/scene/envObject/envObjectManager'
 import NpcNameLabel from '@/components/scene/NpcNameLabel.vue'
 
 const containerRef = ref<HTMLDivElement>()
 const npcVisibilityStates = ref<NpcVisibilityState[]>([])
+const { onlineCount } = useOnlineCount()
 
 onMounted(() => {
   if (!containerRef.value) return
@@ -107,6 +110,8 @@ onMounted(() => {
 
   const biomeManager = new DynamicBiomeManager(earth, faceCells, outlineObjects, outlinePass)
 
+  const meteorSystem = new MeteorSystem({ scene, onlineCount })
+
   const toonGradientMap = getSharedToonGradientMap()
 
   const envObjectSpawner = new EnvObjectSpawner(earth, camera, toonGradientMap, outlineObjects, outlinePass)
@@ -136,6 +141,7 @@ onMounted(() => {
     envObjectManager: envObjectManager as EnvObjectManager | null,
     envSpawnTrigger: envSpawnTrigger as SpawnTrigger | null,
     envObjectSpawner: envObjectSpawner as EnvObjectSpawner | null,
+    meteorSystem,
   }
 
   useSceneAnimation(sceneRefs)

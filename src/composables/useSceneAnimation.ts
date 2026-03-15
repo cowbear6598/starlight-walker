@@ -15,6 +15,7 @@ import type { SpawnTrigger } from '@/scene/spawn/spawnTrigger'
 import type { NpcSpawner } from '@/scene/spawn/npcSpawner'
 import type { EnvObjectManager } from '@/scene/envObject/envObjectManager'
 import type { EnvObjectSpawner } from '@/scene/spawn/envObjectSpawner'
+import type { MeteorSystem } from '@/scene/meteor/meteorSystem'
 
 export interface SceneRefs {
   containerRef: Ref<HTMLDivElement | undefined>
@@ -37,6 +38,7 @@ export interface SceneRefs {
   envObjectManager: EnvObjectManager | null
   envSpawnTrigger: SpawnTrigger | null
   envObjectSpawner: EnvObjectSpawner | null
+  meteorSystem: MeteorSystem | null
 }
 
 const MAX_ALIVE_STARS = 15
@@ -302,6 +304,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
     refs.envObjectManager?.update(refs.earth.rotation.z, currentTimeSeconds)
     animateMoon(currentTimeSeconds, refs.earth.rotation.z)
     animateStarParticles(deltaTimeSeconds, refs.earth.rotation.z)
+    refs.meteorSystem?.update(deltaTimeSeconds)
     animateStickFigure(currentTimeSeconds)
     animateCats(currentTimeSeconds)
     animateCape(currentTimeSeconds)
@@ -323,6 +326,7 @@ export function useSceneAnimation(refs: SceneRefs): void {
   function disposeSceneResources(): void {
     refs.npcManager?.dispose()
     refs.envObjectManager?.dispose()
+    refs.meteorSystem?.dispose()
     refs.biomeManager.dispose()
     disposeSharedToonGradientMap()
 
