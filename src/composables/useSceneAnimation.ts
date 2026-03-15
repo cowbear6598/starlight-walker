@@ -11,6 +11,8 @@ import type { DynamicBiomeManager } from '@/scene/biomeObjects/dynamicBiomeManag
 import { disposeSharedToonGradientMap } from '@/scene/materials'
 import type { NpcManager } from '@/scene/npc/npcManager'
 import type { CatRefs } from '@/scene/cat/createCat'
+import type { SpawnTrigger } from '@/scene/spawn/spawnTrigger'
+import type { NpcSpawner } from '@/scene/spawn/npcSpawner'
 
 export interface SceneRefs {
   containerRef: Ref<HTMLDivElement | undefined>
@@ -27,6 +29,8 @@ export interface SceneRefs {
   bgShaderMaterial: THREE.ShaderMaterial
   biomeManager: DynamicBiomeManager
   npcManager: NpcManager | null
+  spawnTrigger: SpawnTrigger | null
+  npcSpawner: NpcSpawner | null
   cats: CatRefs[]
 }
 
@@ -285,6 +289,8 @@ export function useSceneAnimation(refs: SceneRefs): void {
     animateEarth()
     refs.biomeManager.update(refs.earth.rotation.z)
     refs.biomeManager.animateFish(currentTimeSeconds)
+    refs.spawnTrigger?.update(deltaTimeSeconds)
+    refs.npcSpawner?.update(refs.earth.rotation.z)
     refs.npcManager?.update(refs.earth.rotation.z, currentTimeSeconds)
     animateMoon(currentTimeSeconds, refs.earth.rotation.z)
     animateStarParticles(deltaTimeSeconds, refs.earth.rotation.z)

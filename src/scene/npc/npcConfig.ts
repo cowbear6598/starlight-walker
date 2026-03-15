@@ -58,30 +58,8 @@ export const NPC_LIST: NpcData[] = [
   },
 ]
 
-export const MIN_PHI_SEPARATION = Math.PI / 4
-export const MAX_PHI_GENERATION_ATTEMPTS = 20
-
-export function generateNonOverlappingPhi(
-  existingPhis: number[],
-  excludeIndex?: number,
-): number {
-  for (let attempt = 0; attempt < MAX_PHI_GENERATION_ATTEMPTS; attempt++) {
-    const candidate = Math.random() * Math.PI * 2 - Math.PI
-    const tooClose = existingPhis.some((phi, index) => {
-      if (excludeIndex !== undefined && index === excludeIndex) return false
-      const diff = Math.abs(candidate - phi)
-      const circularDiff = Math.min(diff, Math.PI * 2 - diff)
-      return circularDiff < MIN_PHI_SEPARATION
-    })
-    if (!tooClose) return candidate
-  }
-  return Math.random() * Math.PI * 2 - Math.PI
-}
-
-const VALID_USERNAME_RE = /^[\w.]+$/
-
 export function getThreadsUrl(threadsUsername: string): string {
-  if (!VALID_USERNAME_RE.test(threadsUsername)) {
+  if (!/^[\w.]+$/.test(threadsUsername)) {
     throw new Error(`Invalid Threads username: ${threadsUsername}`)
   }
   return `https://www.threads.net/@${encodeURIComponent(threadsUsername)}`

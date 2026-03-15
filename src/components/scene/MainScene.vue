@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { SCENE_ASPECT, MOON_ARC_HEIGHT, MOON_X, MOON_Y_BASE, MOON_Z } from '@/constants/scene'
+import { SCENE_ASPECT, MOON_ARC_HEIGHT, MOON_X, MOON_Y_BASE, MOON_Z, NPC_SPAWN_INTERVAL_MIN, NPC_SPAWN_INTERVAL_MAX, NPC_SPAWN_FIRST_DELAY_MIN, NPC_SPAWN_FIRST_DELAY_MAX, NPC_MAX_ALIVE } from '@/constants/scene'
 import { PaperTextureShader } from '@/shaders/PaperTextureShader'
 import { BackgroundShader } from '@/shaders/BackgroundShader'
 import { createEarth } from '@/scene/createEarth'
@@ -18,10 +18,12 @@ import { getSharedToonGradientMap } from '@/scene/materials'
 import { createCat } from '@/scene/cat/createCat'
 import { CAT_VARIANTS } from '@/scene/cat/catConfig'
 import type { CatRefs } from '@/scene/cat/createCat'
-import { NPC_LIST, NPC_THETA, generateNonOverlappingPhi } from '@/scene/npc/npcConfig'
-import { preloadAvatarTextures, createNpc } from '@/scene/npc/createNpc'
+import { NPC_LIST } from '@/scene/npc/npcConfig'
+import { preloadAvatarTextures } from '@/scene/npc/createNpc'
 import { NpcManager } from '@/scene/npc/npcManager'
 import type { NpcVisibilityState } from '@/scene/npc/npcManager'
+import { SpawnTrigger } from '@/scene/spawn/spawnTrigger'
+import { NpcSpawner } from '@/scene/spawn/npcSpawner'
 import { useNpcInteraction } from '@/composables/useNpcInteraction'
 import { useSceneAnimation } from '@/composables/useSceneAnimation'
 import NpcNameLabel from '@/components/scene/NpcNameLabel.vue'
@@ -94,14 +96,14 @@ onMounted(() => {
   bgMesh.frustumCulled = false
   scene.add(bgMesh)
 
-  const { earth, biomeSeeds } = createEarth(scene, outlineObjects)
+  const { earth, faceCells } = createEarth(scene, outlineObjects)
   const starParticles = createStars(scene, outlineObjects)
   const moonMesh = createMoon(scene)
   const stickFigure = createStickFigure(scene, outlineObjects)
 
   const cats: CatRefs[] = CAT_VARIANTS.map((variant) => createCat(variant, scene, outlineObjects))
 
-  const biomeManager = new DynamicBiomeManager(earth, biomeSeeds, outlineObjects, outlinePass)
+  const biomeManager = new DynamicBiomeManager(earth, faceCells, outlineObjects, outlinePass)
 
   const sceneRefs = {
     containerRef,
@@ -118,6 +120,8 @@ onMounted(() => {
     bgShaderMaterial: bgMaterial,
     biomeManager,
     npcManager: null as NpcManager | null,
+    spawnTrigger: null as SpawnTrigger | null,
+    npcSpawner: null as NpcSpawner | null,
     cats,
   }
 
@@ -126,17 +130,24 @@ onMounted(() => {
   const toonGradientMap = getSharedToonGradientMap()
 
   preloadAvatarTextures(NPC_LIST).then((textureMap) => {
-    const initialPhis: number[] = []
+    const npcSpawner = new NpcSpawner(
+      NPC_LIST,
+      textureMap,
+      earth,
+      camera,
+      toonGradientMap,
+      outlineObjects,
+      outlinePass,
+      NPC_MAX_ALIVE,
+    )
 
-    const npcRefsList = NPC_LIST.map((npcData) => {
-      const texture = textureMap.get(npcData.id)!
-      const phi = generateNonOverlappingPhi(initialPhis)
-      initialPhis.push(phi)
-      return createNpc(npcData, texture, earth, toonGradientMap, outlineObjects, NPC_THETA, phi)
-    })
+    const spawnTrigger = new SpawnTrigger(NPC_SPAWN_INTERVAL_MIN, NPC_SPAWN_INTERVAL_MAX, NPC_SPAWN_FIRST_DELAY_MIN, NPC_SPAWN_FIRST_DELAY_MAX)
+    spawnTrigger.register({ type: 'npc', spawn: () => npcSpawner.spawn() })
 
-    const npcManager = new NpcManager(npcRefsList, camera, npcVisibilityStates, earth, initialPhis)
+    const npcManager = new NpcManager(npcSpawner, camera, npcVisibilityStates, earth)
     sceneRefs.npcManager = npcManager
+    sceneRefs.spawnTrigger = spawnTrigger
+    sceneRefs.npcSpawner = npcSpawner
 
     const interaction = useNpcInteraction(renderer, camera, npcManager)
     npcManager.setInteractionDispose(interaction.dispose)

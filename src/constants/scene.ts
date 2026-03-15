@@ -27,3 +27,9 @@ export const MOON_VISUAL_RADIUS = (MOON_GEO_SIZE / 2) * MOON_MAX_SCALE
 
 export const CAT_A_OFFSET = { x: 0.35, y: -0.05, z: -0.2 }
 export const CAT_B_OFFSET = { x: 0.65, y: -0.08, z: 0.1 }
+
+export const NPC_SPAWN_INTERVAL_MIN = 30
+export const NPC_SPAWN_INTERVAL_MAX = 45
+export const NPC_SPAWN_FIRST_DELAY_MIN = 0
+export const NPC_SPAWN_FIRST_DELAY_MAX = 0
+export const NPC_MAX_ALIVE = 3

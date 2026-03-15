@@ -190,7 +190,7 @@ function createFlag(avatarTexture: THREE.Texture, toonGradientMap: THREE.DataTex
 
 export async function preloadAvatarTextures(npcList: NpcData[]): Promise<Map<string, THREE.Texture>> {
   const loader = new THREE.TextureLoader()
-  const entries = await Promise.all(
+  const results = await Promise.allSettled(
     npcList.map(async (npcData) => {
       const texture = await loader.loadAsync(npcData.avatarModule)
       texture.magFilter = THREE.LinearFilter
@@ -200,6 +200,9 @@ export async function preloadAvatarTextures(npcList: NpcData[]): Promise<Map<str
       return [npcData.id, texture] as [string, THREE.Texture]
     }),
   )
+  const entries = results
+    .filter((r): r is PromiseFulfilledResult<[string, THREE.Texture]> => r.status === 'fulfilled')
+    .map((r) => r.value)
   return new Map(entries)
 }
 
@@ -219,7 +222,6 @@ export function createNpc(
   avatarTexture: THREE.Texture,
   earth: THREE.Mesh,
   toonGradientMap: THREE.DataTexture,
-  outlineObjects: THREE.Object3D[],
   theta: number,
   phi: number,
 ): NpcRefs {
@@ -252,10 +254,6 @@ export function createNpc(
 
   group.visible = false
   earth.add(group)
-
-  for (const mesh of bodyMeshes) {
-    outlineObjects.push(mesh)
-  }
 
   return npcRefs
 }
